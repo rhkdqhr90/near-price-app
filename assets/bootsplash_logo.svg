@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <!-- Location pin shape -->
+  <path fill-rule="evenodd" clip-rule="evenodd"
+    d="M100 16C69.1 16 44 41.1 44 72C44 102.9 64 122 84 144C90 151 96 158 100 166C104 158 110 151 116 144C136 122 156 102.9 156 72C156 41.1 130.9 16 100 16Z"
+    fill="white"/>
+  <!-- Inner circle -->
+  <circle cx="100" cy="72" r="26" fill="#00BFA5"/>
+  <!-- Price tag mark: two white lines -->
+  <rect x="88" y="65" width="24" height="5" rx="2.5" fill="white"/>
+  <rect x="88" y="75" width="24" height="5" rx="2.5" fill="white"/>
+</svg>

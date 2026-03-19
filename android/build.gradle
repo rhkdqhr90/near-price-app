@@ -6,6 +6,11 @@ buildscript {
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"
+        // NaverMap의 locationServiceVersion을 20.x로 고정:
+        // react-native-geolocation-service는 FusedLocationProviderClient가 class인
+        // play-services-location:18.x 기준으로 컴파일됨.
+        // 21.x부터 interface로 변경되어 IncompatibleClassChangeError 발생.
+        locationServiceVersion = "20.0.0"
     }
     repositories {
         google()
@@ -19,3 +24,13 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+allprojects {
+    repositories {
+        maven { url 'https://devrepo.kakao.com/nexus/content/groups/public/' }
+        maven { url 'https://repository.map.naver.com/archive/maven' }
+    }
+    configurations.all {
+        resolutionStrategy.force 'com.google.android.gms:play-services-location:20.0.0'
+    }
+}

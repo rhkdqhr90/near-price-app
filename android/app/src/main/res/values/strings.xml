@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">NearPriceApp</string>
+    <string name="app_name">마실</string>
+    <string name="kakao_app_key">f25af6b78693a6f92ecd5cf91b9afb34</string>
 </resources>

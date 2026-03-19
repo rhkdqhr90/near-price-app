@@ -35,6 +35,11 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# env (API 키 등 민감 정보)
+.env
+.env.local
+.env.*.local
+
 # node.js
 #
 node_modules/
