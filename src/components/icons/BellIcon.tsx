@@ -1,12 +1,13 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { colors } from '../../theme/colors';
 
 interface Props {
   size?: number;
   color?: string;
 }
 
-const BellIcon: React.FC<Props> = ({ size = 22, color = '#222222' }) => (
+const BellIcon: React.FC<Props> = ({ size = 22, color = colors.gray900 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"

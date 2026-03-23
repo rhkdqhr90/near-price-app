@@ -50,6 +50,9 @@ const ReportSheet = forwardRef<BottomSheetModal, Props>(({ onReport }, ref) => {
             style={[styles.reasonRow, selectedReason === reason && styles.reasonRowSelected]}
             onPress={() => setSelectedReason(reason)}
             activeOpacity={0.7}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selectedReason === reason }}
+            accessibilityLabel={`신고 사유: ${reason}`}
           >
             <Text style={[styles.reasonText, selectedReason === reason && styles.reasonTextSelected]}>
               {reason}
@@ -61,6 +64,9 @@ const ReportSheet = forwardRef<BottomSheetModal, Props>(({ onReport }, ref) => {
           onPress={handleConfirm}
           disabled={!selectedReason}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="신고하기"
+          accessibilityState={{ disabled: !selectedReason }}
         >
           <Text style={styles.confirmButtonText}>신고하기</Text>
         </TouchableOpacity>

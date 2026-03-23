@@ -29,14 +29,14 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     id: '1',
-    title: '양파 1kg,\n어디가 제일 싸?',
-    subtitle: '동네 마트 가격을 한눈에 비교하고\n제일 싼 곳으로 바로 가요',
+    title: '양파 1kg, 어디가 제일 싸?',
+    subtitle: '동네 마트 가격을 한눈에 비교하고 제일 싼 곳으로 바로 가요',
     Icon: WonIcon,
   },
   {
     id: '2',
-    title: '사진 한 장이면\n가격 등록 끝',
-    subtitle: '가격표를 찍으면 자동으로 인식해요\n이웃과 함께 만드는 가격 지도',
+    title: '사진 한 장이면 가격 등록 끝',
+    subtitle: '가격표를 찍으면 자동으로 인식해요 이웃과 함께 만드는 가격 지도',
     Icon: CameraIcon,
   },
 ];
@@ -94,6 +94,8 @@ const OnboardingIntroScreen: React.FC<OnboardingIntroScreenProps> = ({ navigatio
         style={styles.skipButton}
         onPress={handleSkip}
         hitSlop={SKIP_HIT_SLOP}
+        accessibilityRole="button"
+        accessibilityLabel="건너뛰기"
       >
         <Text style={styles.skipText}>건너뛰기</Text>
       </TouchableOpacity>
@@ -112,7 +114,7 @@ const OnboardingIntroScreen: React.FC<OnboardingIntroScreenProps> = ({ navigatio
         onScrollToIndexFailed={() => {}}
       />
 
-      <View style={[styles.footer, { paddingBottom: spacing.xl + spacing.lg + insets.bottom }]}>
+      <View style={[styles.footer, { paddingBottom: spacing.xl + spacing.lg + Math.max(insets.bottom, spacing.md) }]}>
         <View style={styles.dots}>
           {SLIDES.map((slide, index) => (
             <View
@@ -122,7 +124,7 @@ const OnboardingIntroScreen: React.FC<OnboardingIntroScreenProps> = ({ navigatio
           ))}
         </View>
 
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={isLastSlide ? '시작하기' : '다음'}>
           <Text style={styles.nextButtonText}>
             {isLastSlide ? '시작하기' : '다음'}
           </Text>

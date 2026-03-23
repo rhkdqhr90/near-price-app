@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
-import type { UnitType } from '../types/api.types';
+import type { UnitType, PriceResponse } from '../types/api.types';
 
 // ─── Auth Stack ────────────────────────────────────────────────────────────
 
@@ -23,12 +23,15 @@ export type MainTabParamList = {
 
 export type MyPageStackParamList = {
   MyPage: undefined;
+  Badge: undefined;
   MyPriceList: undefined;
   LikedPrices: undefined;
   LocationSetup: { returnTo: 'mypage' };
   NoticeList: undefined;
   NoticeDetail: { noticeId: string };
   Faq: undefined;
+  Inquiry: undefined;
+  NotificationSettings: undefined;
 };
 
 // ─── Home Stack (nested in HomeTab) ───────────────────────────────────────
@@ -37,6 +40,7 @@ export type HomeStackParamList = {
   Home: undefined;
   Search: { initialQuery?: string };
   PriceCompare: { productId: string; productName: string };
+  PriceDetail: { priceId: string };
   StoreDetail: { storeId: string };
 };
 
@@ -45,6 +49,7 @@ export type HomeStackParamList = {
 
 export type PriceRegisterStackParamList = {
   StoreSelect: undefined;
+  StoreRegister: { latitude: number; longitude: number };
   InputMethod: undefined;
   Camera: undefined;
   OcrResult: { imageUri: string };

@@ -1,12 +1,13 @@
 import React from 'react';
 import Svg, { Path, Line } from 'react-native-svg';
+import { colors } from '../../theme/colors';
 
 interface Props {
   size?: number;
   color?: string;
 }
 
-const WifiOffIcon: React.FC<Props> = ({ size = 24, color = '#222222' }) => (
+const WifiOffIcon: React.FC<Props> = ({ size = 24, color = colors.gray900 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M1 6C1 6 5 2 12 2C19 2 23 6 23 6"

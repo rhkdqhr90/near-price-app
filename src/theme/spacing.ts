@@ -9,9 +9,13 @@ export const spacing = {
 
   // 레이아웃
   screenH: 20,   // 화면 좌우 패딩
-  cardGap: 10,   // 카드 간격
+  cardGap: 12,   // 카드 간격
   sectionGap: 24,// 섹션 간격
   headerContent: 20, // 헤더-콘텐츠 간격
+
+  // 카드 패딩
+  cardPadH: 16,  // 카드 가로 패딩
+  cardPadV: 20,  // 카드 세로 패딩
 
   // 컴포넌트
   headerHeight: 56,
@@ -43,4 +47,19 @@ export const spacing = {
   // 미세 간격 / 아이콘 크기
   micro: 2,               // 가장 작은 단위 간격 (카드 텍스트 라인 간격 등)
   iconSm: 16,             // 소형 인라인 아이콘/이모지 크기
+
+  // Border Radius 토큰
+  radiusSm: 6,
+  radiusMd: 10,
+  radiusLg: 16,
+  radiusXl: 24,
+  radiusFull: 9999,
+
+  // 추가 컴포넌트 크기
+  headerIconSize: 40,
+  notifDotSize: 7,
+  cardImageSize: 100,
+  priceImageHeight: 280,
+  priceImagePlaceholderHeight: 160,
+  headerLargeHeight: 56,
 } as const;

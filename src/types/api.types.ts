@@ -3,7 +3,7 @@
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
-  user: Pick<UserResponse, 'id' | 'email' | 'nickname' | 'trustScore'>;
+  user: Pick<UserResponse, 'id' | 'email' | 'nickname' | 'profileImageUrl' | 'trustScore'>;
 }
 
 export interface KakaoLoginDto {
@@ -20,11 +20,20 @@ export interface UserResponse {
   id: string;
   email: string;
   nickname: string;
+  profileImageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
   trustScore: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UpdateNicknameDto {
+  nickname: string;
+}
+
+export interface CheckNicknameResponseDto {
+  available: boolean;
 }
 
 // ─── Store ─────────────────────────────────────────────────────────────────
@@ -34,7 +43,8 @@ export type StoreType =
   | 'mart'
   | 'supermarket'
   | 'convenience'
-  | 'traditional_market';
+  | 'traditional_market'
+  | (string & {}); // 커스텀 카테고리를 위한 문자열 지원
 
 export interface StoreResponse {
   id: string;
@@ -110,7 +120,7 @@ export interface CreateProductDto {
 
 export interface PriceResponse {
   id: string;
-  user: UserResponse;
+  user: UserResponse | null;
   store: StoreResponse;
   product: ProductResponse;
   price: number;
@@ -121,6 +131,10 @@ export interface PriceResponse {
   condition: string | null;
   likeCount: number;
   reportCount: number;
+  trustScore: number | null;
+  verificationCount: number;
+  confirmedCount: number;
+  disputedCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -219,6 +233,101 @@ export interface ReactionResponse {
   myReaction: ReactionType | null;
 }
 
+// ─── Verification (신뢰도 검증) ──────────────────────────────────────────
+
+export type VerificationResult = 'confirmed' | 'disputed';
+
+export interface CreateVerificationDto {
+  result: VerificationResult;
+  actualPrice?: number;
+}
+
+export interface VerifierProfile {
+  id: string;
+  nickname: string;
+  trustScore: number;
+  representativeBadge?: {
+    type: string;
+    name: string;
+    icon: string;
+  } | null;
+  profileImageUrl?: string | null;
+}
+
+export interface VerificationDetail {
+  id: string;
+  result: VerificationResult;
+  actualPrice: number | null;
+  verifier: VerifierProfile;
+  createdAt: string;
+}
+
+export interface VerificationListResponse {
+  data: VerificationDetail[];
+  meta: {
+    total: number;
+    confirmedCount: number;
+    disputedCount: number;
+  };
+}
+
+export interface VerificationResponse {
+  id: string;
+  priceId: string;
+  result: VerificationResult;
+  actualPrice: number | null;
+  newPriceId: string | null;
+  createdAt: string;
+}
+
+export interface PriceTrustScoreResponse {
+  priceId: string;
+  trustScore: number | null;
+  status: 'scored' | 'verifying' | 'new';
+  verificationCount: number;
+  confirmedCount: number;
+  disputedCount: number;
+  isStale: boolean;
+  registeredAt: string;
+  daysSinceRegistered: number;
+}
+
+// ─── Trust Score & Badges ────────────────────────────────────────────────
+
+export interface UserTrustScoreResponse {
+  userId: string;
+  trustScore: number;
+  registrationScore: number;
+  verificationScore: number;
+  consistencyBonus: number;
+  totalRegistrations: number;
+  totalVerifications: number;
+  calculatedAt: string;
+}
+
+export interface BadgeInfo {
+  type: string;
+  name: string;
+  icon: string;
+  category: 'registration' | 'verification' | 'trust';
+  earnedAt?: string;
+}
+
+export interface BadgeProgress {
+  type: string;
+  name: string;
+  icon: string;
+  category: 'registration' | 'verification' | 'trust';
+  current: number;
+  threshold: number;
+  progressPercent: number;
+}
+
+export interface UserBadgesResponse {
+  earned: BadgeInfo[];
+  progress: BadgeProgress[];
+}
+
 // ─── Search ────────────────────────────────────────────────────────────────
 
 export interface SearchProductResult {
@@ -226,6 +335,25 @@ export interface SearchProductResult {
   name: string;
   score: number;
   highlight: string[];
+}
+
+// ─── Inquiry ───────────────────────────────────────────────────────────────
+
+export interface InquiryResponse {
+  id: string;
+  title: string;
+  content: string;
+  email: string;
+  status: 'pending' | 'answered' | 'closed';
+  adminReply: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInquiryDto {
+  title: string;
+  content: string;
+  email: string;
 }
 
 // ─── Error ─────────────────────────────────────────────────────────────────

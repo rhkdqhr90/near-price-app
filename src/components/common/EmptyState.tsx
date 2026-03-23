@@ -11,7 +11,7 @@ interface ActionProps {
 
 interface Props {
   /** SVG icon component that accepts size and color */
-  icon: React.FC<{ size?: number; color?: string }>;
+  icon?: React.FC<{ size?: number; color?: string }>;
   iconSize?: number;
   title: string;
   subtitle?: string;
@@ -26,13 +26,15 @@ const EmptyState: React.FC<Props> = ({
   action,
 }) => (
   <View style={styles.container}>
-    <View style={styles.iconWrapper}>
-      <Icon size={iconSize} color={colors.gray400} />
-    </View>
+    {Icon ? (
+      <View style={styles.iconWrapper}>
+        <Icon size={iconSize} color={colors.gray400} />
+      </View>
+    ) : null}
     <Text style={styles.title}>{title}</Text>
     {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     {action ? (
-      <TouchableOpacity style={styles.button} onPress={action.onPress} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.button} onPress={action.onPress} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={action.label}>
         <Text style={styles.buttonText}>{action.label}</Text>
       </TouchableOpacity>
     ) : null}
@@ -45,7 +47,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xxl,
-    paddingVertical: 48,
+    paddingVertical: spacing.xxl * 2,
   },
   iconWrapper: {
     marginBottom: spacing.lg,
@@ -59,19 +61,18 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.bodySm,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: spacing.xl,
     marginBottom: spacing.lg,
   },
   button: {
     marginTop: spacing.sm,
     backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg + spacing.lg,
   },
   buttonText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+    ...typography.headingMd,
     color: colors.white,
   },
 });

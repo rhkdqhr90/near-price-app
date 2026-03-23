@@ -1,12 +1,13 @@
 import React from 'react';
 import Svg, { Circle, Line } from 'react-native-svg';
+import { colors } from '../../theme';
 
 interface Props {
   size?: number;
   color?: string;
 }
 
-const SearchIcon: React.FC<Props> = ({ size = 22, color = '#AEAEB2' }) => (
+const SearchIcon: React.FC<Props> = ({ size = 22, color = colors.gray400 }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle
       cx="11"

@@ -16,6 +16,9 @@ export const storeApi = {
       params: { lat, lng, radius: radius ?? 3000 },
     }),
 
+  searchByName: (name: string) =>
+    apiClient.get<StoreResponse[]>('/store/search', { params: { name } }),
+
   create: (dto: CreateStoreDto) =>
     apiClient.post<StoreResponse>('/store', dto),
 };

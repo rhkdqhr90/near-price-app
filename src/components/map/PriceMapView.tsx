@@ -31,6 +31,16 @@ const PriceMapView: React.FC<Props> = ({
     return prices.reduce((min, p) => Math.min(min, p.price), Infinity);
   }, [prices]);
 
+  // 유효한 마커만 필터링 (좌표가 숫자인지 확인)
+  const validMarkers = useMemo(() => {
+    return prices.filter((p) => {
+      const isValidLat = typeof p.latitude === 'number' && !isNaN(p.latitude);
+      const isValidLng = typeof p.longitude === 'number' && !isNaN(p.longitude);
+      const isValidPrice = typeof p.price === 'number' && !isNaN(p.price);
+      return isValidLat && isValidLng && isValidPrice;
+    });
+  }, [prices]);
+
   return (
     <MapViewWrapper
       style={styles.map}
@@ -42,7 +52,7 @@ const PriceMapView: React.FC<Props> = ({
       mapType="Basic"
       locale="ko"
     >
-      {prices.map((p) => (
+      {validMarkers.map((p) => (
         <NaverMapMarkerOverlay
           key={p.id}
           latitude={p.latitude}

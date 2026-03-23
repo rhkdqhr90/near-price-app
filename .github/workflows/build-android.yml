@@ -1,0 +1,197 @@
+name: Android 빌드 파이프라인
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '빌드 타입'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Java 설정 (JDK 17)
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: React Native 캐시 설정
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 환경 변수 파일 생성
+        run: |
+          cat > .env << EOF
+          ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+          API_BASE_URL=${{ secrets.API_BASE_URL }}
+          CLOUDFLARE_DOMAIN=${{ secrets.CLOUDFLARE_DOMAIN }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
+          EOF
+          cat .env
+
+      - name: 린팅 (선택사항)
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: 테스트 실행 (선택사항)
+        run: npm run test --if-present
+        continue-on-error: true
+
+      - name: 안드로이드 폴더 권한 설정
+        run: chmod +x android/gradlew
+
+      - name: Android 빌드 (Release)
+        if: github.ref == 'refs/heads/main' || github.event.inputs.build_type == 'release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Keystore 파일 생성
+          echo $KEYSTORE_BASE64 | base64 -d > android/app/release.keystore
+
+          # gradle.properties 설정
+          cat > android/gradle.properties << EOF
+          org.gradle.jvmargs=-Xmx4096m -XX:+UseParallelGC
+          android.useNewApkStructure=true
+          android.enableDexingArtifactTransform=false
+          KEYSTORE_PATH=./app/release.keystore
+          KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
+          KEY_ALIAS=$KEY_ALIAS
+          KEY_PASSWORD=$KEY_PASSWORD
+          EOF
+
+          # Release 빌드
+          cd android
+          ./gradlew clean assembleRelease --no-daemon --stacktrace
+
+      - name: Android 빌드 (Debug)
+        if: github.event.inputs.build_type == 'debug'
+        run: |
+          cd android
+          ./gradlew clean assembleDebug --no-daemon --stacktrace
+
+      - name: APK 파일 찾기
+        id: find_apk
+        run: |
+          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+            echo "apk_path=android/app/build/outputs/apk/release/app-release.apk" >> $GITHUB_OUTPUT
+            echo "apk_name=near-price-$(date +%Y%m%d-%H%M%S)-release.apk" >> $GITHUB_OUTPUT
+          else
+            echo "apk_path=android/app/build/outputs/apk/debug/app-debug.apk" >> $GITHUB_OUTPUT
+            echo "apk_name=near-price-$(date +%Y%m%d-%H%M%S)-debug.apk" >> $GITHUB_OUTPUT
+          fi
+
+      - name: APK 파일 확인
+        run: |
+          if [ -f "${{ steps.find_apk.outputs.apk_path }}" ]; then
+            ls -lh ${{ steps.find_apk.outputs.apk_path }}
+          else
+            echo "APK 파일을 찾을 수 없습니다"
+            find android/app/build/outputs -name "*.apk" -ls
+            exit 1
+          fi
+
+      - name: APK 파일명 변경
+        run: |
+          cp ${{ steps.find_apk.outputs.apk_path }} \
+             ${{ steps.find_apk.outputs.apk_name }}
+
+      - name: APK 빌드 아티팩트 업로드
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.find_apk.outputs.apk_name }}
+          path: ${{ steps.find_apk.outputs.apk_name }}
+          retention-days: 30
+
+      - name: Release 생성 및 APK 업로드
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.find_apk.outputs.apk_name }}
+          tag_name: android-${{ github.run_number }}
+          body: |
+            # NearPrice Android 빌드
+            - **빌드 번호**: ${{ github.run_number }}
+            - **커밋**: ${{ github.sha }}
+            - **시간**: ${{ github.event.head_commit.timestamp }}
+            - **APK 파일**: ${{ steps.find_apk.outputs.apk_name }}
+
+            ## 설치 방법
+            1. APK 파일을 다운로드합니다
+            2. Android 디바이스에서 파일 관리자로 이동합니다
+            3. APK 파일을 실행하여 설치합니다
+            4. "알 수 없는 출처" 권한 확인이 나오면 허용합니다
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Slack 알림 (성공)
+        if: success()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ NearPrice Android 빌드 성공",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*NearPrice Android 빌드 성공* ✅\n*APK*: ${{ steps.find_apk.outputs.apk_name }}\n*커밋*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                  }
+                }
+              ]
+            }
+
+      - name: Slack 알림 (실패)
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ NearPrice Android 빌드 실패",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*NearPlace Android 빌드 실패* ❌\n*작업*: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|자세히 보기>"
+                  }
+                }
+              ]
+            }

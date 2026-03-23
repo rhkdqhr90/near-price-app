@@ -64,6 +64,10 @@ const Toast: React.FC = () => {
         dynamicStyle,
         { opacity, transform: [{ translateY }] },
       ]}
+      accessible={true}
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
+      accessibilityLabel={message}
     >
       <Text style={styles.message}>{message}</Text>
     </Animated.View>
@@ -76,7 +80,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
-    borderRadius: 24,
+    borderRadius: spacing.radiusXl,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

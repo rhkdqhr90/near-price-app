@@ -19,6 +19,7 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useToastStore } from '../../store/toastStore';
+import { getUnitLabel } from '../../utils/unitLabel';
 
 type Props = PriceRegisterScreenProps<'Confirm'>;
 
@@ -111,7 +112,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
   const renderItem = useCallback(({ item, index }: ListRenderItemInfo<ConfirmItem>) => (
     <View style={styles.itemCard}>
       {item.imageUri ? (
-        <Image source={{ uri: item.imageUri }} style={styles.itemThumb} resizeMode="cover" />
+        <Image source={{ uri: item.imageUri }} style={styles.itemThumb} resizeMode="cover" accessibilityRole="image" accessibilityLabel={`${item.productName} 사진`} />
       ) : (
         <View style={styles.itemThumbPlaceholder} />
       )}
@@ -119,14 +120,14 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.itemName} numberOfLines={1}>{item.productName}</Text>
         <Text style={styles.itemPrice}>{formatPrice(item.price)}</Text>
         {item.unitType ? (
-          <Text style={styles.itemUnit}>{item.unitType}{item.quantity ? ` ${item.quantity}` : ''}</Text>
+          <Text style={styles.itemUnit}>{getUnitLabel(item.unitType)}{item.quantity ? ` ${item.quantity}` : ''}</Text>
         ) : null}
       </View>
       <View style={styles.itemActions}>
-        <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(index)} disabled={isPending}>
+        <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(index)} disabled={isPending} accessibilityRole="button" accessibilityLabel={`${item.productName} 수정`}>
           <Text style={styles.editBtnText}>수정</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(index)} disabled={isPending}>
+        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(index)} disabled={isPending} accessibilityRole="button" accessibilityLabel={`${item.productName} 삭제`}>
           <Text style={styles.deleteBtnText}>삭제</Text>
         </TouchableOpacity>
       </View>
@@ -142,7 +143,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
   }, [items, submitAll]);
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{storeName ?? ''}</Text>
@@ -169,6 +170,9 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
           onPress={handleSubmit}
           disabled={isPending || items.length === 0}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={isPending ? '등록 중' : `전체 등록 ${items.length}개`}
+          accessibilityState={{ disabled: isPending || items.length === 0 }}
         >
           <Text style={styles.submitBtnText}>
             {isPending ? '등록 중...' : `전체 등록 (${items.length}개)`}
@@ -189,7 +193,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray200,
   },
   headerTitle: { ...typography.headingXl },
-  headerSub: { ...typography.bodySm, marginTop: 2 },
+  headerSub: { ...typography.bodySm, marginTop: spacing.micro },
   listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
   itemCard: {
     flexDirection: 'row',
@@ -202,19 +206,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.cardGap,
     gap: spacing.md,
   },
-  itemThumb: { width: 56, height: 56, borderRadius: 8 },
+  itemThumb: { width: spacing.cameraControlSize, height: spacing.cameraControlSize, borderRadius: spacing.radiusMd },
   itemThumbPlaceholder: {
-    width: 56, height: 56, borderRadius: 8, backgroundColor: colors.gray100,
+    width: spacing.cameraControlSize, height: spacing.cameraControlSize, borderRadius: spacing.radiusMd, backgroundColor: colors.gray100,
   },
   itemInfo: { flex: 1 },
-  itemName: { ...typography.headingMd, marginBottom: 4 },
+  itemName: { ...typography.headingMd, marginBottom: spacing.cardTextGap },
   itemPrice: { ...typography.price },
-  itemUnit: { ...typography.bodySm, color: colors.gray400, marginTop: 2 },
-  itemActions: { gap: 6 },
+  itemUnit: { ...typography.bodySm, color: colors.gray400, marginTop: spacing.micro },
+  itemActions: { gap: spacing.xs + spacing.micro },
   editBtn: {
     backgroundColor: colors.primaryLight,
     borderRadius: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: spacing.xs + spacing.micro,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
   },
@@ -222,7 +226,7 @@ const styles = StyleSheet.create({
   deleteBtn: {
     backgroundColor: colors.dangerLight,
     borderRadius: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: spacing.xs + spacing.micro,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
   },

@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: spacing.radiusMd,
     overflow: 'hidden',
     marginBottom: spacing.cardGap,
     height: CARD_HEIGHT,
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     width: COLOR_BAR_WIDTH,
     height: COLOR_BAR_HEIGHT,
     marginLeft: spacing.inputPad,
-    borderRadius: 2,
+    borderRadius: spacing.micro,
   },
   body: {
     flex: 1,
@@ -55,12 +55,12 @@ const styles = StyleSheet.create({
   titleLine: {
     width: 130,
     height: 14,
-    borderRadius: 7,
+    borderRadius: spacing.radiusSm,
   },
   priceLine: {
     width: 80,
     height: 12,
-    borderRadius: 6,
+    borderRadius: spacing.radiusSm,
   },
   deleteArea: {
     width: DELETE_ICON_SIZE,

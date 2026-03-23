@@ -1,25 +1,15 @@
 import axios from 'axios';
 import { NAVER_SEARCH_CLIENT_ID, NAVER_SEARCH_CLIENT_SECRET } from '../utils/config';
+import { vworldApi } from './vworld.api';
+import { kakaoApi } from './kakao.api';
 
-// ─── Nominatim (OpenStreetMap) — 역지오코딩, 키 불필요 ─────────────────────
+// ─── Nominatim (OpenStreetMap) — 주소 검색 전용 ─────────────────────
 
 const nominatimClient = axios.create({
   baseURL: 'https://nominatim.openstreetmap.org',
   timeout: 10000,
   headers: { 'User-Agent': 'NearPriceApp/1.0 (contact@nearprice.kr)' },
 });
-
-interface NominatimAddress {
-  suburb?: string;
-  quarter?: string;
-  borough?: string;
-  city_district?: string;
-  neighbourhood?: string;
-}
-
-interface NominatimResponse {
-  address: NominatimAddress;
-}
 
 interface NominatimSearchItem {
   display_name: string;
@@ -71,13 +61,20 @@ interface NaverLocalResponse {
 }
 
 export const naverLocalApi = {
+  // 역지오코딩: 좌표 → 동 이름 변환
+  // 1순위: Vworld (국토교통부, 심사 불필요)
+  // 2순위: 카카오 (카카오맵 심사 통과 후 활성화)
   coord2Region: async (longitude: number, latitude: number): Promise<string | null> => {
-    const res = await nominatimClient.get<NominatimResponse>('/reverse', {
-      // zoom=17: 동/읍/면 수준 정밀도 (18=건물, 16=구)
-      params: { format: 'json', lat: latitude, lon: longitude, 'accept-language': 'ko', zoom: 17 },
-    });
-    const addr = res.data.address;
-    return addr.suburb ?? addr.quarter ?? addr.neighbourhood ?? addr.borough ?? addr.city_district ?? null;
+    try {
+      return await vworldApi.reverseGeocode(longitude, latitude);
+    } catch {
+      // Vworld 실패 시 카카오 폴백
+      try {
+        return await kakaoApi.reverseGeocode(longitude, latitude);
+      } catch {
+        return null;
+      }
+    }
   },
 
   // 주소/동 이름 검색: 텍스트 → 좌표 목록 (Nominatim)
@@ -94,9 +91,11 @@ export const naverLocalApi = {
     }));
   },
 
-  searchKeyword: async (query: string): Promise<NaverPlaceDocument[]> => {
+  searchKeyword: async (query: string, regionHint?: string): Promise<NaverPlaceDocument[]> => {
+    // regionHint가 있으면 검색어에 동네 이름 추가 (위치 기반 검색 효과)
+    const searchQuery = regionHint ? `${regionHint} ${query}` : query;
     const res = await naverSearchClient.get<NaverLocalResponse>('/search/local.json', {
-      params: { query, display: 5, sort: 'random' },
+      params: { query: searchQuery, display: 10, sort: 'random' },
     });
     return res.data.items.map((item) => {
       // Naver Search API mapx/mapy는 소수점 없는 정수 (경도/위도 × 1e7)

@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   StyleSheet,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
@@ -21,10 +20,12 @@ import { useNearbyStores } from '../../hooks/queries/useNearbyStores';
 import { useLocationStore } from '../../store/locationStore';
 import EmptyState from '../../components/common/EmptyState';
 import HighlightText from '../../components/common/HighlightText';
+import LoadingView from '../../components/common/LoadingView';
 import SearchIcon from '../../components/icons/SearchIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import TagIcon from '../../components/icons/TagIcon';
 import StoreIcon from '../../components/icons/StoreIcon';
+import CloseIcon from '../../components/icons/CloseIcon';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -103,10 +104,15 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.resultItem}
           onPress={() => handleProductPress(item)}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`상품 ${item.name}, 탭하여 가격 비교`}
         >
-          <SearchIcon size={16} color={colors.gray400} />
+          <View style={styles.productIconBox}>
+            <TagIcon size={16} color={colors.primary} />
+          </View>
           <View style={styles.resultBody}>
             <HighlightText text={highlightText} baseStyle={styles.resultName} />
+            <Text style={styles.resultHint}>탭하여 가격 비교 →</Text>
           </View>
         </TouchableOpacity>
       );
@@ -120,6 +126,8 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
         style={styles.resultItem}
         onPress={() => handleStorePress(item)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`매장 ${item.name}, ${item.distance}미터`}
       >
         <View style={styles.storeIconBox}>
           <StoreIcon size={16} color={colors.gray600} />
@@ -166,14 +174,16 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
+            accessibilityLabel={activeTab === 'product' ? '상품 검색' : '매장명 검색'}
+            accessibilityHint={activeTab === 'product' ? '상품 이름을 입력하세요' : '매장명을 입력하세요'}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClear} hitSlop={HIT_SLOP}>
-              <Text style={styles.clearText}>✕</Text>
+            <TouchableOpacity onPress={handleClear} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="검색어 삭제">
+              <CloseIcon size={16} color={colors.gray400} />
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="취소">
           <Text style={styles.cancelText}>취소</Text>
         </TouchableOpacity>
       </View>
@@ -186,6 +196,9 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
             style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
             activeOpacity={0.7}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === tab }}
+            accessibilityLabel={tab === 'product' ? '상품 검색' : '매장 검색'}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
               {tab === 'product' ? '상품' : '매장'}
@@ -208,9 +221,7 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           title="상품 이름을 입력하세요"
         />
       ) : isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <LoadingView message="검색 중..." />
       ) : isError ? (
         <EmptyState
           icon={WifiOffIcon}
@@ -230,6 +241,13 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           renderItem={renderProductItem}
           keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            productResults && productResults.length > 0 ? (
+              <View style={styles.resultHeader}>
+                <Text style={styles.resultHeaderText}>검색 결과 {productResults.length}건</Text>
+              </View>
+            ) : null
+          }
         />
       ) : (
         <FlatList
@@ -257,11 +275,6 @@ const styles = StyleSheet.create({
   inner: {
     flex: 1,
   },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,7 +289,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.gray100,
-    borderRadius: 10,
+    borderRadius: spacing.radiusMd,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
@@ -311,7 +324,7 @@ const styles = StyleSheet.create({
   tab: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    borderRadius: 20,
+    borderRadius: spacing.radiusFull,
     backgroundColor: colors.gray100,
   },
   tabActive: {
@@ -355,6 +368,31 @@ const styles = StyleSheet.create({
   distanceText: {
     ...typography.bodySm,
     color: colors.gray400,
+  },
+  productIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: spacing.sm,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultHint: {
+    ...typography.caption,
+    color: colors.primary,
+    marginTop: spacing.micro,
+  },
+  resultHeader: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.gray100,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.gray200,
+  },
+  resultHeaderText: {
+    ...typography.caption,
+    color: colors.gray600,
+    fontWeight: '600' as const,
   },
 });
 

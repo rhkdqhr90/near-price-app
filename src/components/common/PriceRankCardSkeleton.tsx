@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: spacing.radiusMd,
     padding: spacing.lg,
     marginBottom: spacing.cardGap,
     gap: spacing.md,
@@ -50,17 +50,17 @@ const styles = StyleSheet.create({
   storeLine: {
     width: 100,
     height: 14,
-    borderRadius: 7,
+    borderRadius: spacing.radiusSm,
   },
   metaLine: {
     width: 140,
     height: 11,
-    borderRadius: 5.5,
+    borderRadius: spacing.radiusSm,
   },
   priceLine: {
     width: 60,
     height: 16,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
   },
 });
 

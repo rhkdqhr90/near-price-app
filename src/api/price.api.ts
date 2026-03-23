@@ -8,6 +8,9 @@ export const priceApi = {
   getByProduct: (productId: string) =>
     apiClient.get<PriceResponse[]>(`/price/product/${productId}`),
 
+  getByProductName: (name: string) =>
+    apiClient.get<PriceResponse[]>('/price/by-name', { params: { name } }),
+
   getAll: () =>
     apiClient.get<PriceResponse[]>('/price'),
 

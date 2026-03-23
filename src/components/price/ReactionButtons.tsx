@@ -52,6 +52,9 @@ const ReactionButtons: React.FC<Props> = ({ priceId }) => {
           style={styles.confirmButton}
           onPress={handleConfirmPress}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`맞아요${confirmCount > 0 ? ` ${confirmCount}명` : ''}`}
+          accessibilityState={{ checked: isConfirmed }}
         >
           <CheckIcon
             size={spacing.iconSm}
@@ -67,6 +70,9 @@ const ReactionButtons: React.FC<Props> = ({ priceId }) => {
           onPress={handleMorePress}
           activeOpacity={0.7}
           disabled={isReported}
+          accessibilityRole="button"
+          accessibilityLabel="더보기"
+          accessibilityState={{ disabled: isReported }}
         >
           <MoreIcon
             size={spacing.iconSm}

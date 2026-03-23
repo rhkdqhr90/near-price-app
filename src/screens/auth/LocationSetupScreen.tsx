@@ -22,6 +22,7 @@ import MapViewWrapper from '../../components/map/MapViewWrapper';
 import type { NaverGeocodeResult } from '../../api/naver-local.api';
 import { useReverseGeocode, useGeocodeSearch } from '../../hooks/queries/useLocation';
 import { useLocationStore } from '../../store/locationStore';
+import MapPinIcon from '../../components/icons/MapPinIcon';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -44,29 +45,68 @@ const LocationSetupScreen: React.FC = () => {
     regionName: string;
   } | null>(null);
 
+  // 인라인 에러 배너 상태
+  const [inlineError, setInlineError] = useState<string | null>(null);
+
   const { setLocation } = useLocationStore();
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  const { data: reverseGeocodedName, isError: isReverseError, isPending: isReversePending } =
-    useReverseGeocode(gpsLatLng?.lng ?? null, gpsLatLng?.lat ?? null);
+  const {
+    data: reverseGeocodedName,
+    isError: isReverseError,
+    isPending: isReversePending,
+    isFetching: isReverseFetching,
+    invalidateAndRefetch,
+  } = useReverseGeocode(gpsLatLng?.lng ?? null, gpsLatLng?.lat ?? null);
 
   const { data: geocodeResults, isFetching: isSearching } = useGeocodeSearch(debouncedSearchQuery);
 
   const searchResults: NaverGeocodeResult[] = useMemo(() => geocodeResults ?? [], [geocodeResults]);
 
-  const selectedRegionName = previewLocation?.regionName ?? null;
+  const selectedRegionName = previewLocation?.regionName || null;
 
   // Sync reverse geocode result → previewLocation
+  // 이전에 처리한 결과를 추적하여 무한 루프 방지
+  const lastProcessedRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (gpsLatLng === null) return;
-    if (isReversePending) return;
-    setPreviewLocation({
-      latitude: gpsLatLng.lat,
-      longitude: gpsLatLng.lng,
-      regionName: reverseGeocodedName ?? '현재 위치',
-    });
+    if (isReverseFetching) return; // 아직 로딩 중이면 대기
+
+    // 동일한 결과를 중복 처리하지 않음
+    const resultKey = `${gpsLatLng.lat},${gpsLatLng.lng},${reverseGeocodedName ?? ''},${isReverseError}`;
+    if (lastProcessedRef.current === resultKey) return;
+    lastProcessedRef.current = resultKey;
+
+    if (isReverseError) {
+      setPreviewLocation({
+        latitude: gpsLatLng.lat,
+        longitude: gpsLatLng.lng,
+        regionName: '',
+      });
+      setIsGpsLoading(false);
+      setInlineError('현재 위치의 동네 정보를 가져올 수 없습니다. 주소를 직접 검색하거나 다시 시도해 주세요.');
+      return;
+    }
+
+    if (reverseGeocodedName) {
+      setPreviewLocation({
+        latitude: gpsLatLng.lat,
+        longitude: gpsLatLng.lng,
+        regionName: reverseGeocodedName,
+      });
+      setInlineError(null);
+    } else if (reverseGeocodedName === null) {
+      // API 성공이지만 동 이름 없음 (해상/산간 지역 등)
+      setPreviewLocation({
+        latitude: gpsLatLng.lat,
+        longitude: gpsLatLng.lng,
+        regionName: '',
+      });
+    }
     setIsGpsLoading(false);
-  }, [gpsLatLng, reverseGeocodedName, isReverseError, isReversePending]);
+  }, [gpsLatLng, reverseGeocodedName, isReverseError, isReverseFetching]);
 
   const requestLocationPermission = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
@@ -83,12 +123,15 @@ const LocationSetupScreen: React.FC = () => {
   }, []);
 
   const handleGpsDetect = useCallback(async () => {
+    setInlineError(null);
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
-      Alert.alert('권한 거부', '위치 권한을 허용해야 동네를 자동으로 설정할 수 있습니다');
+      setInlineError('위치 권한을 허용해야 동네를 자동으로 설정할 수 있습니다.');
       return;
     }
     setIsGpsLoading(true);
+    // 이전 역지오코딩 캐시 무효화 (실패 결과 재사용 방지)
+    invalidateAndRefetch().catch(() => {});
     Geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -97,7 +140,7 @@ const LocationSetupScreen: React.FC = () => {
       },
       () => {
         setIsGpsLoading(false);
-        Alert.alert('위치 오류', '현재 위치를 가져올 수 없습니다. 주소를 직접 검색해 주세요');
+        setInlineError('현재 위치를 가져올 수 없습니다. 주소를 직접 검색해 주세요.');
       },
       {
         enableHighAccuracy: true,
@@ -106,7 +149,7 @@ const LocationSetupScreen: React.FC = () => {
         forceRequestLocation: true,
       },
     );
-  }, [requestLocationPermission]);
+  }, [requestLocationPermission, invalidateAndRefetch]);
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
@@ -122,9 +165,10 @@ const LocationSetupScreen: React.FC = () => {
     const latitude = parseFloat(doc.y);
     const longitude = parseFloat(doc.x);
     if (isNaN(latitude) || isNaN(longitude)) {
-      Alert.alert('오류', '유효하지 않은 주소입니다. 다른 주소를 선택해 주세요.');
+      setInlineError('유효하지 않은 주소입니다. 다른 주소를 선택해 주세요.');
       return;
     }
+    setInlineError(null);
     // jibunAddress = 동 이름(첫 토큰), roadAddress = 전체 주소(목록 표시용)
     const regionName = doc.jibunAddress || doc.roadAddress;
     setPreviewLocation({ latitude, longitude, regionName });
@@ -134,7 +178,7 @@ const LocationSetupScreen: React.FC = () => {
 
   const handleConfirm = () => {
     if (!previewLocation) {
-      Alert.alert('동네를 선택해 주세요');
+      setInlineError('동네를 선택해 주세요.');
       return;
     }
     setLocation(previewLocation.latitude, previewLocation.longitude, previewLocation.regionName);
@@ -145,9 +189,13 @@ const LocationSetupScreen: React.FC = () => {
     }
   };
 
+  // 마운트 시 1회만 GPS 감지 실행
+  // handleGpsDetect를 deps에 넣으면 queryKey 변경 → 무한 루프 발생
+  const handleGpsDetectRef = useRef(handleGpsDetect);
+  handleGpsDetectRef.current = handleGpsDetect;
   useEffect(() => {
-    handleGpsDetect();
-  }, [handleGpsDetect]);
+    handleGpsDetectRef.current();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -158,9 +206,10 @@ const LocationSetupScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.container}>
         <ScrollView
+          ref={scrollViewRef}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -168,16 +217,37 @@ const LocationSetupScreen: React.FC = () => {
           <Text style={styles.title}>동네 설정</Text>
           <Text style={styles.subtitle}>어디서 장을 보시나요?</Text>
 
+          {/* 인라인 에러 배너 */}
+          {inlineError ? (
+            <View style={styles.errorBanner} accessible={true} accessibilityLiveRegion="polite" accessibilityLabel={`오류: ${inlineError}`}>
+              <Text style={styles.errorBannerText}>{inlineError}</Text>
+              <TouchableOpacity
+                onPress={() => setInlineError(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="오류 메시지 닫기"
+              >
+                <Text style={styles.errorBannerClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* GPS 자동 감지 */}
           <TouchableOpacity
             style={styles.gpsButton}
             onPress={handleGpsDetect}
             disabled={isGpsLoading}
-            activeOpacity={0.8}>
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="현재 위치 자동 감지"
+          >
             {isGpsLoading ? (
-              <ActivityIndicator color={colors.primary} size="small" />
+              <ActivityIndicator color={colors.primary} size="small" accessibilityLabel="위치 감지 중" />
             ) : (
-              <Text style={styles.gpsButtonText}>📍 현재 위치 자동 감지</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                <MapPinIcon size={spacing.iconSm} color={colors.primary} />
+                <Text style={styles.gpsButtonText}>현재 위치 자동 감지</Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -189,9 +259,10 @@ const LocationSetupScreen: React.FC = () => {
             </View>
           ) : null}
 
-          {/* 지도 미리보기 */}
+          {/* 지도 미리보기 — key로 위치 변경 시 지도 리마운트 */}
           {previewLocation ? (
             <MapViewWrapper
+              key={`${previewLocation.latitude}_${previewLocation.longitude}`}
               style={styles.mapPreview}
               initialCamera={{
                 latitude: previewLocation.latitude,
@@ -207,11 +278,14 @@ const LocationSetupScreen: React.FC = () => {
               mapType="Basic"
               locale="ko"
             >
-              <NaverMapMarkerOverlay
-                latitude={previewLocation.latitude}
-                longitude={previewLocation.longitude}
-                tintColor={colors.primary}
-              />
+              {typeof previewLocation.latitude === 'number' && typeof previewLocation.longitude === 'number'
+                && !isNaN(previewLocation.latitude) && !isNaN(previewLocation.longitude) && (
+                  <NaverMapMarkerOverlay
+                    latitude={previewLocation.latitude}
+                    longitude={previewLocation.longitude}
+                    tintColor={colors.primary}
+                  />
+                )}
             </MapViewWrapper>
           ) : null}
 
@@ -228,15 +302,22 @@ const LocationSetupScreen: React.FC = () => {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={handleSearch}
+              onFocus={() => {
+                // 키보드가 올라올 때 검색란이 보이도록 스크롤
+                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300);
+              }}
               placeholder="동 이름으로 검색 (예: 역삼동)"
               placeholderTextColor={colors.gray400}
               returnKeyType="search"
+              accessibilityLabel="동 이름 검색"
+              accessibilityHint="동 이름으로 지역을 검색하세요"
             />
             {isSearching ? (
               <ActivityIndicator
                 style={styles.searchIndicator}
                 color={colors.primary}
                 size="small"
+                accessibilityLabel="검색 중"
               />
             ) : null}
           </View>
@@ -249,7 +330,10 @@ const LocationSetupScreen: React.FC = () => {
                   key={`${item.jibunAddress}-${item.x}-${item.y}`}
                   style={styles.searchResultItem}
                   onPress={() => handleSelectAddress(item)}
-                  activeOpacity={0.7}>
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`주소 ${item.roadAddress || item.jibunAddress}`}
+                >
                   <Text style={styles.searchResultText}>
                     {item.roadAddress || item.jibunAddress}
                   </Text>
@@ -267,7 +351,11 @@ const LocationSetupScreen: React.FC = () => {
               ]}
               onPress={handleConfirm}
               disabled={!selectedRegionName}
-              activeOpacity={0.8}>
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={selectedRegionName ? `${selectedRegionName}로 시작하기` : '동네를 선택하세요'}
+              accessibilityState={{ disabled: !selectedRegionName }}
+            >
               <Text style={styles.confirmButtonText}>시작하기</Text>
             </TouchableOpacity>
           </View>
@@ -299,13 +387,36 @@ const styles = StyleSheet.create({
     color: colors.gray600,
     marginBottom: spacing.lg,
   },
+  // 인라인 에러 배너
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.dangerLight,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  errorBannerText: {
+    ...typography.bodySm,
+    color: colors.danger,
+    flex: 1,
+  },
+  errorBannerClose: {
+    ...typography.tagText,
+    color: colors.danger,
+    fontWeight: '600' as const,
+  },
   gpsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     paddingVertical: spacing.md,
     marginBottom: spacing.md,
     minHeight: 48,
@@ -316,7 +427,7 @@ const styles = StyleSheet.create({
   },
   selectedRegion: {
     backgroundColor: colors.white,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     padding: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
@@ -353,7 +464,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.gray200,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -368,7 +479,7 @@ const styles = StyleSheet.create({
   },
   searchResultList: {
     backgroundColor: colors.white,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     borderWidth: 1,
     borderColor: colors.gray200,
     marginBottom: spacing.sm,
@@ -381,7 +492,7 @@ const styles = StyleSheet.create({
   },
   mapPreview: {
     height: spacing.locationMapPreviewH,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     overflow: 'hidden',
     marginBottom: spacing.md,
   },
@@ -394,7 +505,7 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',

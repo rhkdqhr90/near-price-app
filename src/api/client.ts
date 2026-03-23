@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { useNetworkStore } from '../store/networkStore';
 import { API_BASE_URL } from '../utils/config';
 
 interface RetryConfig extends InternalAxiosRequestConfig {
@@ -40,10 +41,19 @@ const processQueue = (error: unknown, token: string | null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // 요청 성공 → 오프라인 상태 해제
+    useNetworkStore.getState().setOffline(false);
+    return response;
+  },
   async (error: unknown) => {
     if (!axios.isAxiosError(error) || !error.config) {
       return Promise.reject(error);
+    }
+
+    // 네트워크 에러 감지 (서버 응답 없음 = 네트워크 문제)
+    if (!error.response && error.code !== 'ERR_CANCELED') {
+      useNetworkStore.getState().setOffline(true);
     }
 
     const config = error.config as RetryConfig;

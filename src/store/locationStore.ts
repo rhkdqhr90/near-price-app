@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 
-export const RADIUS_OPTIONS = [3000, 5000, 10000, 15000] as const;
+export const RADIUS_OPTIONS = [1000, 3000, 5000, 10000] as const;
 export type RadiusOption = (typeof RADIUS_OPTIONS)[number];
 
 interface LocationState {
@@ -28,7 +28,7 @@ export const useLocationStore = create<LocationState>((set, get) => ({
   latitude: null,
   longitude: null,
   regionName: null,
-  radius: 5000,
+  radius: 10000,
 
   setLocation: (latitude, longitude, regionName) => {
     set({ latitude, longitude, regionName: regionName ?? null });
@@ -58,18 +58,22 @@ export const useLocationStore = create<LocationState>((set, get) => ({
   },
 
   clearLocation: () => {
-    set({ latitude: null, longitude: null, regionName: null, radius: 5000 });
+    set({ latitude: null, longitude: null, regionName: null, radius: 10000 });
     storage.remove(STORAGE_KEYS.LOCATION).catch(noop);
   },
 
   restoreLocation: async () => {
     const saved = await storage.get<PersistedLocation>(STORAGE_KEYS.LOCATION);
     if (saved) {
+      // 이전에 저장된 radius가 현재 옵션에 없으면 기본값 사용
+      const validRadius = RADIUS_OPTIONS.includes(saved.radius as RadiusOption)
+        ? (saved.radius as RadiusOption)
+        : 10000;
       set({
         latitude: saved.latitude,
         longitude: saved.longitude,
         regionName: saved.regionName,
-        radius: saved.radius ?? 5000,
+        radius: validRadius,
       });
     }
   },

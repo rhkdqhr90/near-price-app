@@ -10,8 +10,8 @@ interface Props {
 
 const LoadingView: React.FC<Props> = ({ message }) => {
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={colors.primary} />
+    <View style={styles.container} accessible={true} accessibilityLabel={message || '로딩 중'}>
+      <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="로딩" />
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
   );
