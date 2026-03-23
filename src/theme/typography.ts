@@ -6,35 +6,35 @@ const fontFamily = Platform.select({ ios: 'System', android: 'Roboto' }) ?? 'Sys
 export const typography = {
   headingXl: {
     fontFamily,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700' as const,
     color: colors.black,
     letterSpacing: -0.3,
   },
   headingLg: {
     fontFamily,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: colors.black,
     letterSpacing: -0.3,
   },
   headingMd: {
     fontFamily,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600' as const,
     color: colors.black,
     letterSpacing: -0.2,
   },
   body: {
     fontFamily,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '400' as const,
     color: colors.gray900,
     lineHeight: 22,
   },
   bodySm: {
     fontFamily,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '400' as const,
     color: colors.gray600,
   },
@@ -52,9 +52,9 @@ export const typography = {
   },
   price: {
     fontFamily,
-    fontSize: 17,
-    fontWeight: '700' as const,
-    color: colors.black,
+    fontSize: 26,
+    fontWeight: '800' as const,
+    color: colors.primary,
     letterSpacing: -0.3,
   },
   tabLabel: {
@@ -97,5 +97,27 @@ export const typography = {
     fontSize: 20,
     fontWeight: '700' as const,
     color: colors.black,
+  },
+  // 에러 텍스트 (13pt 500 danger)
+  error: {
+    fontFamily,
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.danger,
+  },
+  // 비활성 텍스트 (14pt 400 gray400)
+  disabled: {
+    fontFamily,
+    fontSize: 14,
+    fontWeight: '400' as const,
+    color: colors.gray400,
+  },
+  // 브랜드 텍스트 (40pt 700 primary) — 로그인 화면 등 대형 타이틀용
+  brand: {
+    fontFamily,
+    fontSize: 40,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    letterSpacing: -0.5,
   },
 } as const;

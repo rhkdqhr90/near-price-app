@@ -18,6 +18,7 @@ const PriceMapView: React.FC<Props> = ({ prices, onMarkerPress }) => {
     const seen = new Set<string>();
     return prices
       .filter((p) => {
+        if (!p.store?.id) return false;
         if (seen.has(p.store.id)) return false;
         seen.add(p.store.id);
         return true;
@@ -25,7 +26,7 @@ const PriceMapView: React.FC<Props> = ({ prices, onMarkerPress }) => {
       .map((p) => ({
         id: p.store.id,
         price: p.price,
-        storeName: p.store.name,
+        storeName: p.store?.name ?? '매장',
         latitude: p.store.latitude,
         longitude: p.store.longitude,
       }));

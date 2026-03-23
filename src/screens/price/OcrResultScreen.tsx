@@ -89,7 +89,7 @@ const OcrResultScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Image source={{ uri: imageUri }} style={styles.image} resizeMode="contain" />
+      <Image source={{ uri: imageUri }} style={styles.image} resizeMode="contain" accessibilityRole="image" accessibilityLabel="촬영한 가격표 이미지" />
 
       <ScrollView style={styles.resultScroll} contentContainerStyle={styles.resultSection}>
         <Text style={styles.sectionTitle}>인식된 가격 항목</Text>
@@ -100,6 +100,8 @@ const OcrResultScreen: React.FC<Props> = ({ navigation, route }) => {
               style={styles.ocrItemCard}
               onPress={() => handleSelectItem(item)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name} ${parseInt(item.price, 10).toLocaleString()}원 선택`}
             >
               <View style={styles.ocrCardColorBar} />
               <View style={styles.ocrCardBody}>
@@ -116,13 +118,13 @@ const OcrResultScreen: React.FC<Props> = ({ navigation, route }) => {
                 ? '가격 정보를 자동으로 인식하지 못했습니다.'
                 : '텍스트를 인식하지 못했습니다.'}
             </Text>
-            <TouchableOpacity style={styles.manualBtn} onPress={() => navigation.goBack()}>
+            <TouchableOpacity style={styles.manualBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="다시 촬영하기">
               <Text style={styles.manualBtnText}>다시 촬영하기</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        <TouchableOpacity style={styles.manualBtn} onPress={handleManualEntry}>
+        <TouchableOpacity style={styles.manualBtn} onPress={handleManualEntry} accessibilityRole="button" accessibilityLabel="직접 입력">
           <Text style={styles.manualBtnText}>인식이 안 됐나요? 직접 입력</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -138,20 +140,20 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.headingLg, marginBottom: spacing.md },
   ocrItemCard: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.white, borderRadius: 12,
+    backgroundColor: colors.white, borderRadius: spacing.radiusMd,
     borderWidth: 0.5, borderColor: colors.gray200,
     overflow: 'hidden', marginBottom: spacing.cardGap,
   },
   ocrCardColorBar: {
     width: 3, backgroundColor: colors.primary, alignSelf: 'stretch',
-    marginVertical: spacing.md, marginLeft: spacing.inputPad, borderRadius: 2,
+    marginVertical: spacing.md, marginLeft: spacing.inputPad, borderRadius: spacing.micro,
   },
   ocrCardBody: { flex: 1, paddingVertical: spacing.inputPad, paddingLeft: spacing.md },
   ocrItemName: { ...typography.headingMd, marginBottom: spacing.xs },
   ocrItemPrice: { ...typography.price, color: colors.primary },
   ocrSelectHint: { ...typography.tagText, fontWeight: '600' as const, color: colors.primary, paddingRight: spacing.lg },
   noResultBox: {
-    backgroundColor: colors.white, borderRadius: 12, padding: spacing.xl,
+    backgroundColor: colors.white, borderRadius: spacing.radiusMd, padding: spacing.xl,
     borderWidth: 0.5, borderColor: colors.gray200, alignItems: 'center',
     marginBottom: spacing.md,
   },

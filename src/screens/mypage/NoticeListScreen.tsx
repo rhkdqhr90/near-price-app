@@ -1,11 +1,11 @@
-import React, { useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import type { MyPageScreenProps } from '../../navigation/types';
 import { useNoticeList } from '../../hooks/queries/useNotice';
 import type { NoticeResponse } from '../../types/api.types';
 import LoadingView from '../../components/common/LoadingView';
 import ErrorView from '../../components/common/ErrorView';
-import EmptyView from '../../components/common/EmptyView';
+import EmptyState from '../../components/common/EmptyState';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -29,6 +29,8 @@ const NoticeItem = React.memo<NoticeItemProps>(({ item, onPress }) => {
       style={styles.item}
       onPress={() => onPress(item.id)}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`공지사항 ${item.title}`}
     >
       <View style={styles.itemHeader}>
         {item.isPinned ? (
@@ -49,11 +51,21 @@ const ItemSeparator: React.FC = () => <View style={styles.separator} />;
 
 const NoticeListScreen: React.FC<Props> = ({ navigation }) => {
   const { data, isLoading, isError, refetch } = useNoticeList();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handlePressItem = useCallback(
     (id: string) => navigation.navigate('NoticeDetail', { noticeId: id }),
     [navigation],
   );
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch]);
 
   const renderItem = useCallback(
     ({ item }: { item: NoticeResponse }) => (
@@ -69,7 +81,7 @@ const NoticeListScreen: React.FC<Props> = ({ navigation }) => {
     return <ErrorView message="공지사항을 불러오지 못했습니다" onRetry={refetch} />;
   }
   if (!data || data.length === 0) {
-    return <EmptyView message="등록된 공지사항이 없습니다" />;
+    return <EmptyState title="등록된 공지사항이 없습니다" />;
   }
 
   return (
@@ -79,6 +91,13 @@ const NoticeListScreen: React.FC<Props> = ({ navigation }) => {
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       ItemSeparatorComponent={ItemSeparator}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+        />
+      }
     />
   );
 };

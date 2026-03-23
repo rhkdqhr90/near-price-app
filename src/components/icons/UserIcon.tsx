@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { colors } from '../../theme/colors';
 
 interface Props {
   size?: number;
@@ -11,8 +12,8 @@ interface Props {
 const UserIcon: React.FC<Props> = ({
   size = 24,
   active = false,
-  activeColor = '#222222',
-  inactiveColor = '#C0C0C0',
+  activeColor = colors.gray900,
+  inactiveColor = colors.gray400,
 }) => {
   const color = active ? activeColor : inactiveColor;
   return (

@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { colors } from '../../theme/colors';
 
 interface Props {
   size?: number;
@@ -7,7 +8,7 @@ interface Props {
   filled?: boolean;
 }
 
-const StoreIcon: React.FC<Props> = ({ size = 22, color = '#222222', filled = false }) => (
+const StoreIcon: React.FC<Props> = ({ size = 22, color = colors.gray900, filled = false }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"

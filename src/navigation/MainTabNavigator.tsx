@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import { useFCM } from '../hooks/useFCM';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,15 +10,16 @@ import type {
   PriceRegisterStackParamList,
   MyPageStackParamList,
 } from './types';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { colors as dsColors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import HomeScreen from '../screens/home/HomeScreen';
 import SearchScreen from '../screens/home/SearchScreen';
 import PriceCompareScreen from '../screens/price/PriceCompareScreen';
+import PriceDetailScreen from '../screens/price/PriceDetailScreen';
 import StoreDetailScreen from '../screens/price/StoreDetailScreen';
 import StoreSelectScreen from '../screens/price/StoreSelectScreen';
+import StoreRegisterScreen from '../screens/price/StoreRegisterScreen';
 import InputMethodScreen from '../screens/price/InputMethodScreen';
 import CameraScreen from '../screens/price/CameraScreen';
 import OcrResultScreen from '../screens/price/OcrResultScreen';
@@ -30,15 +32,14 @@ import LikedPricesScreen from '../screens/mypage/LikedPricesScreen';
 import NoticeListScreen from '../screens/mypage/NoticeListScreen';
 import NoticeDetailScreen from '../screens/mypage/NoticeDetailScreen';
 import FaqScreen from '../screens/mypage/FaqScreen';
+import InquiryScreen from '../screens/mypage/InquiryScreen';
+import NotificationSettingsScreen from '../screens/mypage/NotificationSettingsScreen';
+import BadgeScreen from '../screens/mypage/BadgeScreen';
 import LocationSetupScreen from '../screens/auth/LocationSetupScreen';
 import HomeIconSvg from '../components/icons/HomeIcon';
 import HeartIconSvg from '../components/icons/HeartIcon';
 import UserIconSvg from '../components/icons/UserIcon';
 import PlusCircleIconSvg from '../components/icons/PlusCircleIcon';
-
-const LocationSetupInMyPage: React.FC<NativeStackScreenProps<MyPageStackParamList, 'LocationSetup'>> = () => (
-  <LocationSetupScreen />
-);
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -61,7 +62,12 @@ const HomeStackNavigator: React.FC = () => (
     <HomeStack.Screen
       name="PriceCompare"
       component={PriceCompareScreen}
-      options={({ route }) => ({ title: route.params.productName })}
+      options={{ headerShown: false }}
+    />
+    <HomeStack.Screen
+      name="PriceDetail"
+      component={PriceDetailScreen}
+      options={{ headerShown: false }}
     />
     <HomeStack.Screen
       name="StoreDetail"
@@ -76,6 +82,11 @@ const PriceRegisterStackNavigator: React.FC = () => (
     <PriceRegisterStack.Screen
       name="StoreSelect"
       component={StoreSelectScreen}
+      options={{ headerShown: false }}
+    />
+    <PriceRegisterStack.Screen
+      name="StoreRegister"
+      component={StoreRegisterScreen}
       options={{ headerShown: false }}
     />
     <PriceRegisterStack.Screen
@@ -107,10 +118,10 @@ const PriceRegisterStackNavigator: React.FC = () => (
 );
 
 function makeTabIcon(
-  Icon: React.FC<{ size?: number; active?: boolean }>,
+  Icon: React.FC<{ size?: number; color?: string; filled?: boolean }>,
 ) {
   return function TabIcon({ focused }: { focused: boolean }) {
-    return <Icon size={24} active={focused} />;
+    return <Icon size={24} color={focused ? dsColors.tabIconActive : dsColors.tabIconInactive} filled={focused} />;
   };
 }
 
@@ -133,7 +144,7 @@ const MyPageStackNavigator: React.FC = () => (
     />
     <MyPageStack.Screen
       name="LocationSetup"
-      component={LocationSetupInMyPage}
+      component={LocationSetupScreen}
       options={{ title: '동네 변경' }}
     />
     <MyPageStack.Screen
@@ -151,6 +162,21 @@ const MyPageStackNavigator: React.FC = () => (
       component={FaqScreen}
       options={{ title: '도움말 / FAQ' }}
     />
+    <MyPageStack.Screen
+      name="Inquiry"
+      component={InquiryScreen}
+      options={{ headerShown: false }}
+    />
+    <MyPageStack.Screen
+      name="NotificationSettings"
+      component={NotificationSettingsScreen}
+      options={{ title: '알림 설정' }}
+    />
+    <MyPageStack.Screen
+      name="Badge"
+      component={BadgeScreen}
+      options={{ headerShown: false }}
+    />
   </MyPageStack.Navigator>
 );
 
@@ -161,6 +187,8 @@ const PlusCircleTabIcon = makeTabIcon(PlusCircleIconSvg);
 
 const MainTabNavigator: React.FC = () => {
   const insets = useSafeAreaInsets();
+  // FCM 토큰 관리 + 알림 수신 (로그인 후 1회)
+  useFCM();
   return (
   <Tab.Navigator
     screenOptions={{

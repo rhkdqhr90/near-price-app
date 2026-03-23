@@ -1,14 +1,15 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Pressable,
   StyleSheet, Alert, RefreshControl, type ListRenderItemInfo,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MainTabScreenProps } from '../../navigation/types';
 import type { WishlistItem } from '../../types/api.types';
 import { useMyWishlist, useRemoveWishlist } from '../../hooks/queries/useWishlist';
 import EmptyState from '../../components/common/EmptyState';
-import WishlistCardSkeleton from '../../components/common/WishlistCardSkeleton';
+import SkeletonCard from '../../components/common/SkeletonCard';
 import HeartIcon from '../../components/icons/HeartIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import { formatPrice } from '../../utils/format';
@@ -23,6 +24,16 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: wishlist, isLoading, isError, refetch } = useMyWishlist();
   const { mutate: removeWishlist } = useRemoveWishlist();
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+
+  const listContentStyle = React.useMemo(
+    () => ({
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing.lg,
+      paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl + spacing.lg,
+    }),
+    [insets.bottom],
+  );
 
   const handleItemPress = useCallback((item: WishlistItem) => {
     // HomeStack으로 크로스 탭 이동: 탭 스택 상태 보존은 React Navigation 기본 동작
@@ -43,7 +54,17 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleDelete = useCallback((item: WishlistItem) => {
     Alert.alert('찜 삭제', `${item.productName}을(를) 찜 목록에서 삭제할까요?`, [
-      { text: '취소', style: 'cancel' },
+      {
+        text: '취소',
+        style: 'cancel',
+        onPress: () => {
+          // 스와이프 아이템 닫기
+          const ref = swipeableRefs.current.get(item.productId);
+          if (ref) {
+            ref.close();
+          }
+        },
+      },
       {
         text: '삭제',
         style: 'destructive',
@@ -53,36 +74,78 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
     ]);
   }, [removeWishlist]);
 
-  const renderItem = useCallback(({ item }: ListRenderItemInfo<WishlistItem>) => (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={() => handleItemPress(item)}
-    >
-      <View style={styles.cardColorBar} />
-      <View style={styles.cardBody}>
-        <Text style={styles.productName} numberOfLines={1}>{item.productName}</Text>
-        {item.lowestPrice !== null ? (
-          <View style={styles.priceRow}>
-            <Text style={styles.lowestPrice}>{formatPrice(item.lowestPrice)}</Text>
-            {item.lowestPriceStoreName ? (
-              <Text style={styles.storeName} numberOfLines={1}>{item.lowestPriceStoreName}</Text>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.noPrice}>가격 정보 없음</Text>
-        )}
+  const renderDeleteAction = useCallback(
+    (item: WishlistItem) => (
+      <View style={styles.deleteActionContainer}>
+        <TouchableOpacity
+          style={styles.deleteAction}
+          onPress={() => {
+            // Swipeable 닫기 후 삭제 로직 수행
+            const ref = swipeableRefs.current.get(item.productId);
+            if (ref) {
+              ref.close();
+            }
+            removeWishlist(item.productId);
+          }}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.productName} 즉시 삭제`}
+        >
+          <Text style={styles.deleteActionText}>삭제</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={styles.deleteBtn}
-        onPress={() => handleDelete(item)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <HeartIcon size={20} color={colors.danger} filled />
-      </TouchableOpacity>
-    </Pressable>
-  ), [handleItemPress, handleDelete]);
+    ),
+    [removeWishlist]
+  );
 
-  if (isLoading) return <WishlistCardSkeleton />;
+  const renderItem = useCallback(({ item }: ListRenderItemInfo<WishlistItem>) => (
+    <Swipeable
+      ref={(ref) => {
+        if (ref) {
+          swipeableRefs.current.set(item.productId, ref);
+        } else {
+          swipeableRefs.current.delete(item.productId);
+        }
+      }}
+      renderRightActions={() => renderDeleteAction(item)}
+      overshootRight={false}
+      rightThreshold={50}
+      friction={2}
+    >
+      <Pressable
+        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+        onPress={() => handleItemPress(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`찜한 상품 ${item.productName}${item.lowestPrice !== null ? ` ${formatPrice(item.lowestPrice)}` : ''}`}
+      >
+        <View style={styles.cardColorBar} />
+        <View style={styles.cardBody}>
+          <Text style={styles.productName} numberOfLines={1}>{item.productName}</Text>
+          {item.lowestPrice !== null ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.lowestPrice}>{formatPrice(item.lowestPrice)}</Text>
+              {item.lowestPriceStoreName ? (
+                <Text style={styles.storeName} numberOfLines={1}>{item.lowestPriceStoreName}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.noPrice}>가격 정보 없음</Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() => handleDelete(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.productName} 찜 삭제`}
+        >
+          <HeartIcon size={20} color={colors.danger} filled />
+        </TouchableOpacity>
+      </Pressable>
+    </Swipeable>
+  ), [handleItemPress, handleDelete, renderDeleteAction]);
+
+  if (isLoading) return <SkeletonCard variant="wishlist" />;
   if (isError) {
     return (
       <EmptyState
@@ -113,7 +176,7 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
           data={items}
           keyExtractor={item => item.productId}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={listContentStyle}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -142,13 +205,13 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxl + spacing.lg },
   card: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.white, borderRadius: 12,
+    backgroundColor: colors.white, borderRadius: spacing.radiusMd,
     borderWidth: 0.5, borderColor: colors.gray200,
     overflow: 'hidden', marginBottom: spacing.cardGap,
   },
   cardColorBar: {
     width: 3, backgroundColor: colors.primary, alignSelf: 'stretch',
-    marginVertical: spacing.md, marginLeft: spacing.inputPad, borderRadius: 2,
+    marginVertical: spacing.md, marginLeft: spacing.inputPad, borderRadius: spacing.micro,
   },
   cardBody: { flex: 1, paddingVertical: spacing.lg, paddingLeft: spacing.md, paddingRight: spacing.sm },
   cardPressed: { opacity: 0.7 },
@@ -158,6 +221,26 @@ const styles = StyleSheet.create({
   storeName: { ...typography.bodySm, flex: 1 },
   noPrice: { ...typography.bodySm, color: colors.gray400 },
   deleteBtn: { padding: spacing.lg },
+  deleteActionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    backgroundColor: colors.danger,
+    marginBottom: spacing.cardGap,
+    borderRadius: spacing.radiusMd,
+    marginRight: spacing.xl,
+  },
+  deleteAction: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteActionText: {
+    ...typography.bodySm,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
 });
 
 export default WishlistScreen;

@@ -55,27 +55,54 @@
 
 ### 토큰 / 인증
 - [ ] `accessToken`, `refreshToken`이 `console.log`, 에러 메시지, UI에 절대 노출되지 않는가?
+- [ ] 로그아웃 시 AsyncStorage에서 토큰 완전 삭제하는가?
 - [ ] 401 응답 처리 시 refresh 실패 → `logout()` 호출이 보장되는가?
 - [ ] refresh token이 만료되었을 때 무한 재시도 없이 즉시 로그아웃하는가?
-- [ ] JWT 토큰을 `AsyncStorage`에 저장하는 것은 현재 스펙 허용 범위 (민감도 낮음)이지만, 불필요한 곳에 복사/전달하지 않는가?
+- [ ] JWT 토큰을 `AsyncStorage`에 저장하는 것은 현재 스펙 허용 범위이지만, 불필요한 곳에 복사/전달하지 않는가?
+- [ ] 민감한 정보 (좌표, 개인 위치)를 로그에 남기지 않는가?
 
 ### API 요청
 - [ ] 사용자 입력이 포함된 API 파라미터를 그대로 URL에 삽입하지 않는가? (path injection)
 - [ ] `multipart/form-data` 업로드 시 파일 타입/크기 검증이 UI 단에도 있는가? (서버 검증에만 의존 금지)
 - [ ] 인증이 필요한 API(`⭐` 표시)는 반드시 토큰이 주입된 `apiClient`를 사용하는가?
+- [ ] API 응답에서 `statusCode`, `error` 필드를 신뢰하고 사용자 UI에 직접 노출하지 않는가?
 
 ### 화면 / 데이터 표시
 - [ ] 서버에서 받은 문자열을 `dangerouslySetInnerHTML` 또는 `WebView`에 그대로 넘기지 않는가?
 - [ ] 딥링크나 외부 URL 파라미터를 파싱할 때 검증 없이 네비게이션에 사용하지 않는가?
 - [ ] 에러 응답의 `message` 필드를 사용자에게 그대로 노출하지 않는가? (내부 정보 유출)
+- [ ] 사용자 입력 (검색어, 매장명)에 XSS 위험이 없는가? (React Native의 Text는 안전하지만, WebView 사용 시 주의)
+
+### 권한 및 개인정보
+- [ ] 카메라, 위치, 연락처 등 권한 요청 시 명확한 이유를 설명했는가?
+- [ ] 위치 정보는 필요한 시점에만 수집하고, 불필요한 저장 없는가?
+- [ ] 사진 업로드 시 EXIF 데이터(위치, 시간)를 제거했는가? (선택사항이지만 권장)
 
 ---
 
 ## 4. 성능
 
+### 렌더링 최적화
 - [ ] 컴포넌트가 불필요하게 자주 리렌더링되지 않는가? (객체/배열 리터럴을 props로 직접 전달 금지)
-- [ ] 리스트가 길어질 수 있는 경우 `FlatList`를 사용하는가? (`ScrollView` + `map` 금지)
-- [ ] 무거운 연산에 `useMemo`/`useCallback`을 적용했는가? (단, 과도한 최적화 금지)
+- [ ] 리스트 아이템에 `React.memo` 또는 `useMemo`를 적용했는가?
+- [ ] FlatList에서 `removeClippedSubviews={true}`를 설정했는가? (성능 향상)
+- [ ] 긴 리스트에는 `FlatList`를 사용하는가? (`ScrollView` + `map` 금지)
+- [ ] FlatList의 `scrollEventThrottle` 설정했는가? (60 권장)
+
+### 연산 최적화
+- [ ] 무거운 연산(정렬, 필터링)에 `useMemo`를 적용했는가?
+- [ ] 콜백 함수를 의존하는 child에 `useCallback`을 적용했는가?
+- [ ] 과도한 최적화는 없는가? (모든 컴포넌트에 memo 금지)
+
+### 메모리 관리
+- [ ] 구독 또는 이벤트 리스너의 cleanup이 있는가? (useEffect return)
+- [ ] 타이머/Interval을 cleanup에서 clear하는가?
+- [ ] 큰 배열을 state에 저장하지 않는가? (React Query 권장)
+
+### 네트워크 최적화
+- [ ] 불필요한 API 호출이 없는가? (의존 배열 확인)
+- [ ] 캐시 전략을 사용하는가? (React Query: staleTime, cacheTime)
+- [ ] 페이지네이션 또는 무한 스크롤을 구현했는가? (대량 데이터)
 
 ---
 

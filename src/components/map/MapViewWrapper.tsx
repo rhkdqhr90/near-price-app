@@ -29,8 +29,8 @@ const MapViewWrapper = forwardRef<NaverMapViewRef, Props>(
           {children}
         </NaverMapView>
         {!isLoaded && (
-          <View style={styles.loadingOverlay} pointerEvents="none">
-            <ActivityIndicator size="large" color={colors.primary} />
+          <View style={styles.loadingOverlay} pointerEvents="none" accessible={true} accessibilityLabel="지도 로딩 중">
+            <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="로딩 중" />
           </View>
         )}
       </View>

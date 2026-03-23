@@ -1,5 +1,10 @@
 import React, { useCallback } from 'react';
-import { StatusBar, StyleSheet } from 'react-native';
+import { StatusBar, StyleSheet, UIManager, Platform } from 'react-native';
+
+// Android에서 LayoutAnimation 사용을 위한 필수 설정
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { NavigationContainer } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +13,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import BootSplash from 'react-native-bootsplash';
 import RootNavigator from './src/navigation/RootNavigator';
 import Toast from './src/components/common/Toast';
+import OfflineBanner from './src/components/common/OfflineBanner';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +39,7 @@ function App(): React.JSX.Element {
               <RootNavigator />
             </NavigationContainer>
             <Toast />
+            <OfflineBanner />
           </BottomSheetModalProvider>
         </SafeAreaProvider>
       </QueryClientProvider>

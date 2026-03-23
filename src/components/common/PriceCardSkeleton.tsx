@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: spacing.radiusMd,
     overflow: 'hidden',
     marginBottom: spacing.cardGap,
     height: CARD_HEIGHT,
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     width: COLOR_BAR_WIDTH,
     marginVertical: COLOR_BAR_MARGIN_V,
     marginLeft: spacing.inputPad,
-    borderRadius: 2,
+    borderRadius: spacing.micro,
   },
   body: {
     flex: 1,
@@ -63,12 +63,12 @@ const styles = StyleSheet.create({
   titleLine: {
     width: 120,
     height: 14,
-    borderRadius: 7,
+    borderRadius: spacing.radiusSm,
   },
   metaLine: {
     width: 160,
     height: 11,
-    borderRadius: 5.5,
+    borderRadius: spacing.radiusSm,
   },
   right: {
     alignItems: 'flex-end',
@@ -77,12 +77,12 @@ const styles = StyleSheet.create({
   priceLine: {
     width: 64,
     height: 16,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
   },
   compareLine: {
     width: 44,
     height: 11,
-    borderRadius: 5.5,
+    borderRadius: spacing.radiusSm,
   },
 });
 

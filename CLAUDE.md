@@ -33,32 +33,97 @@ src/
 │   ├── price.api.ts
 │   ├── product.api.ts
 │   ├── store.api.ts
-│   └── wishlist.api.ts
+│   ├── wishlist.api.ts
+│   ├── verification.api.ts # 신뢰도 검증 API
+│   └── badge.api.ts        # 뱃지 API
 ├── components/             # 재사용 컴포넌트
-│   ├── common/             # LoadingView, ErrorView, EmptyView 등
-│   └── price/              # PriceRankCard 등
+│   ├── common/             # 공통 UI 컴포넌트
+│   │   ├── Button.tsx      # 다중 variant 버튼 (primary/secondary/outline/ghost)
+│   │   ├── SkeletonCard.tsx # 로딩 상태 스켈레톤 카드
+│   │   ├── SkeletonBox.tsx # 기본 스켈레톤 박스
+│   │   ├── MenuItem.tsx    # 메뉴 항목 (아이콘 + 텍스트 + 화살표)
+│   │   ├── OfflineBanner.tsx # 오프라인 배너
+│   │   ├── Toast.tsx       # 토스트 알림 (success/warning/error)
+│   │   ├── ReportSheet.tsx # 신고 바텀시트
+│   │   ├── EmptyState.tsx  # 빈 상태 화면
+│   │   ├── ErrorView.tsx   # 에러 상태 화면
+│   │   ├── LoadingView.tsx # 로딩 상태 화면
+│   │   ├── HighlightText.tsx # 강조 텍스트
+│   │   └── index.tsx       # 배럴 export
+│   ├── icons/              # SVG 아이콘 컴포넌트
+│   │   ├── CloseIcon.tsx   # X 아이콘
+│   │   ├── StoreIcon.tsx   # 매장 아이콘
+│   │   ├── MapPinIcon.tsx  # 위치 아이콘
+│   │   ├── SearchIcon.tsx  # 검색 아이콘
+│   │   ├── CheckIcon.tsx   # 체크마크
+│   │   ├── HeartIcon.tsx   # 찜(하트) 아이콘
+│   │   ├── HomeIcon.tsx    # 홈 아이콘
+│   │   ├── CameraIcon.tsx  # 카메라 아이콘
+│   │   ├── ChevronIcon.tsx # 화살표 아이콘
+│   │   └── (... 기타 SVG)
+│   ├── map/                # 지도 관련 컴포넌트
+│   │   └── PriceMapView.tsx # 네이버맵 통합
+│   └── price/              # 가격 관련 컴포넌트
+│       ├── PriceRankCard.tsx # 가격 순위 카드
+│       └── (... 기타)
 ├── hooks/                  # 커스텀 훅
-│   └── queries/            # React Query 훅 (useProductPrices 등)
+│   ├── useAuth.ts         # 인증 상태 및 로직
+│   ├── useLocation.ts     # 위치 정보 훅
+│   └── queries/            # React Query 훅
+│       ├── useProductPrices.ts
+│       ├── usePriceVerifications.ts # 신뢰도 검증 쿼리
+│       ├── useBadges.ts   # 뱃지 쿼리
+│       └── (... 기타)
 ├── navigation/             # 네비게이션 설정
-│   ├── RootNavigator.tsx
-│   ├── AuthStack.tsx
-│   ├── MainTabNavigator.tsx
-│   └── types.ts
+│   ├── RootNavigator.tsx   # 최상위 Stack (비로그인/로그인)
+│   ├── AuthStack.tsx       # 인증 화면 Stack
+│   ├── MainTabNavigator.tsx # 로그인 후 Tab + Stack 조합
+│   ├── OnboardingNavigator.tsx # 권한 동의 화면
+│   └── types.ts            # 네비게이션 param 타입 정의
 ├── screens/                # 화면 컴포넌트
-│   ├── auth/               # LoginScreen, LocationSetupScreen
-│   ├── home/               # HomeScreen
-│   ├── price/              # PriceCompareScreen, PriceRegisterScreen 등
-│   ├── wishlist/           # WishlistScreen
-│   └── mypage/             # MyPageScreen
-├── store/                  # Zustand 스토어
-│   ├── authStore.ts        # 인증 상태 (토큰, 유저)
-│   └── locationStore.ts    # 위치 상태 (현재 동네)
-├── types/                  # 공유 타입
-│   └── api.types.ts        # API 요청/응답 타입
-└── utils/
+│   ├── auth/               # 인증 관련 화면
+│   │   ├── LoginScreen.tsx # 카카오 로그인
+│   │   └── LocationSetupScreen.tsx # 동네 선택
+│   ├── onboarding/         # 온보딩 화면
+│   │   └── PermissionScreen.tsx # 카메라/위치/알림 권한 요청
+│   ├── home/               # 홈 탭 화면
+│   │   ├── HomeScreen.tsx  # 홈 피드
+│   │   └── SearchScreen.tsx # 검색 화면
+│   ├── price/              # 가격 등록/비교 화면 (복잡한 플로우)
+│   │   ├── CameraScreen.tsx # 카메라로 가격표 촬영
+│   │   ├── OcrResultScreen.tsx # OCR 인식 결과 확인
+│   │   ├── ItemDetailScreen.tsx # 품목 상세 정보 입력 폼
+│   │   ├── StoreSelectScreen.tsx # 매장 선택 (지도 포함)
+│   │   ├── InputMethodScreen.tsx # 입력 방식 선택 (카메라/수동)
+│   │   ├── PriceCompareScreen.tsx # 상품별 가격 비교
+│   │   ├── StoreDetailScreen.tsx # 매장 상세 (지도/리뷰)
+│   │   └── ConfirmScreen.tsx # 최종 확인 및 저장
+│   ├── wishlist/           # 찜목록 탭
+│   │   └── WishlistScreen.tsx # 찜 목록
+│   └── mypage/             # 마이페이지 탭
+│       ├── MyPageScreen.tsx # 사용자 정보/활동 요약
+│       ├── MyPriceListScreen.tsx # 내가 등록한 가격
+│       ├── LikedPricesScreen.tsx # 내가 인정한 가격
+│       ├── NoticeListScreen.tsx # 공지 목록
+│       ├── NoticeDetailScreen.tsx # 공지 상세
+│       └── FaqScreen.tsx   # FAQ
+├── store/                  # Zustand 글로벌 상태
+│   ├── authStore.ts        # 인증 (토큰, 유저 정보, 로그인 상태)
+│   ├── locationStore.ts    # 위치 (현재 동네, 좌표)
+│   └── (... 기타)
+├── theme/                  # 디자인 토큰 (Phase 1 완성)
+│   ├── colors.ts           # 색상 토큰 (primary, success, warning, danger 등)
+│   ├── typography.ts       # 타이포그래피 토큰 (heading-xl, body, price 등)
+│   ├── spacing.ts          # 간격 및 반경 토큰 (xs~xxl, radiusSm~Full)
+│   └── index.ts            # 배럴 export
+├── types/                  # 공유 TypeScript 타입
+│   └── api.types.ts        # API 요청/응답 타입 (Product, Price, User, PriceVerification 등)
+└── utils/                  # 유틸 함수
     ├── storage.ts          # AsyncStorage 래퍼
-    ├── format.ts           # 가격 포맷팅
-    └── theme.ts            # 색상, 간격 상수
+    ├── format.ts           # 가격/날짜 포맷팅
+    ├── constants.ts        # 상수 (API 경로, 지도 설정 등)
+    ├── config.ts           # 환경 설정 (API_BASE_URL, NAVER_CLIENT_ID 등)
+    └── highlight.ts        # 텍스트 강조 유틸리티
 ```
 
 ## 설계 원칙
@@ -67,13 +132,31 @@ src/
 - 서버 상태는 React Query, 클라이언트 상태는 Zustand (혼용 금지)
 
 ## 코딩 규칙 — 절대 위반 금지
-1. 함수형 컴포넌트 + hooks만 사용 (class 컴포넌트 금지)
-2. 컴포넌트 파일명: PascalCase (PriceCard.tsx)
-3. 훅/유틸 파일명: camelCase (useAuth.ts, format.ts)
-4. 인라인 스타일 금지 → StyleSheet.create 사용
-5. any 타입 금지
-6. console.log 커밋 금지
-7. 하드코딩 색상/문자열 금지 → theme.ts, constants로 분리
+1. **함수형 컴포넌트 + hooks만 사용** (class 컴포넌트 금지)
+2. **컴포넌트 파일명**: PascalCase (PriceCard.tsx)
+3. **훅/유틸 파일명**: camelCase (useAuth.ts, format.ts)
+4. **인라인 스타일 금지** → StyleSheet.create 사용
+5. **any 타입 금지** → 구체적인 인터페이스/타입 정의
+6. **console.log 커밋 금지** → 개발 중에만 사용
+7. **하드코딩 금지**:
+   - 색상: theme/colors.ts 사용 (primary, success, warning, danger, gray* 등)
+   - 간격/크기: theme/spacing.ts 사용 (xs, sm, md, lg, xl, radiusMd 등)
+   - 타이포그래피: theme/typography.ts 사용 (headingXl, body, price 등)
+   - 문자열: utils/constants.ts에 정의
+8. **API 호출** → 항상 src/api/ 레이어 경유 (컴포넌트에서 직접 axios 금지)
+9. **상태 관리 역할 분리**:
+   - 서버 상태 (데이터): React Query (useQuery, useMutation)
+   - 클라이언트 상태 (UI, 로그인 정보): Zustand (useAuthStore, useLocationStore)
+10. **네비게이션 타입**: src/navigation/types.ts에 먼저 정의 후 사용
+11. **접근성 (Accessibility)**:
+    - `<Pressable>`, `<TouchableOpacity>`에 `accessibilityRole` 지정
+    - 버튼/아이콘에 `accessibilityLabel` 필수
+    - 폼 입력에 `accessibilityHint` 권장
+    - WCAG AA 색상 대비: 일반 텍스트 4.5:1, 큰 텍스트 3:1
+12. **FlatList 규칙**:
+    - `keyExtractor`는 고유 ID 사용 (index 금지)
+    - ScrollView 안에 중첩 금지 → ListHeaderComponent 사용
+    - `removeClippedSubviews={true}` 권장 (성능)
 
 ## 네비게이션 구조
 ```

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { typography } from '../../theme/typography';
 import MapPinIcon from '../../components/icons/MapPinIcon';
 import CameraIcon from '../../components/icons/CameraIcon';
 import BellIcon from '../../components/icons/BellIcon';
+import CheckIcon from '../../components/icons/CheckIcon';
 
 interface PermissionConfig {
   key: 'location' | 'camera' | 'notification';
@@ -87,16 +88,30 @@ const requestAndroidPermission = async (config: PermissionConfig): Promise<void>
 const PermissionScreen: React.FC = () => {
   const { markOnboardingSeen } = useOnboardingStore();
   const insets = useSafeAreaInsets();
+  const [permissionStatuses, setPermissionStatuses] = useState<Record<string, boolean>>({
+    location: false,
+    camera: false,
+    notification: false,
+  });
 
   const handleAllow = useCallback(async () => {
+    const newStatuses: Record<string, boolean> = { ...permissionStatuses };
     if (Platform.OS === 'android') {
       for (const p of PERMISSION_LIST) {
-        await requestAndroidPermission(p);
+        try {
+          await requestAndroidPermission(p);
+          // 권한 요청 후 상태 업데이트
+          newStatuses[p.key] = true;
+        } catch {
+          // 권한 거부 시
+          newStatuses[p.key] = false;
+        }
       }
     }
+    setPermissionStatuses(newStatuses);
     // iOS: 각 기능 첫 사용 시 시스템이 직접 요청
     markOnboardingSeen();
-  }, [markOnboardingSeen]);
+  }, [markOnboardingSeen, permissionStatuses]);
 
   return (
     <View style={styles.container}>
@@ -107,6 +122,7 @@ const PermissionScreen: React.FC = () => {
         <View style={styles.list}>
           {PERMISSION_LIST.map((item) => {
             const { Icon } = item;
+            const isGranted = permissionStatuses[item.key];
             return (
               <View key={item.key} style={styles.item}>
                 <View style={styles.iconBox}>
@@ -123,14 +139,19 @@ const PermissionScreen: React.FC = () => {
                   </View>
                   <Text style={styles.itemDescription}>{item.description}</Text>
                 </View>
+                {isGranted && (
+                  <View style={styles.statusIcon}>
+                    <CheckIcon size={20} color={colors.success} />
+                  </View>
+                )}
               </View>
             );
           })}
         </View>
       </View>
 
-      <View style={[styles.footer, { paddingBottom: spacing.xl + spacing.lg + insets.bottom }]}>
-        <TouchableOpacity style={styles.allowButton} onPress={handleAllow} activeOpacity={0.8}>
+      <View style={[styles.footer, { paddingBottom: spacing.xl + spacing.lg + Math.max(insets.bottom, spacing.md) }]}>
+        <TouchableOpacity style={styles.allowButton} onPress={handleAllow} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="권한 허용 확인">
           <Text style={styles.allowButtonText}>확인</Text>
         </TouchableOpacity>
       </View>
@@ -198,6 +219,15 @@ const styles = StyleSheet.create({
   itemDescription: {
     ...typography.body,
     color: colors.gray600,
+  },
+  statusIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.successLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
   },
   footer: {
     paddingHorizontal: spacing.xl,

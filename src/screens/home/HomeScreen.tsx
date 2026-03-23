@@ -1,14 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   FlatList,
   Pressable,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   RefreshControl,
-  Animated,
+  Alert,
   type ListRenderItemInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,16 +20,17 @@ import { typography } from '../../theme/typography';
 import { useRecentPrices } from '../../hooks/queries/usePrices';
 import { useLocationStore } from '../../store/locationStore';
 import EmptyState from '../../components/common/EmptyState';
-import PriceCardSkeleton from '../../components/common/PriceCardSkeleton';
+import SkeletonCard from '../../components/common/SkeletonCard';
 import TagIcon from '../../components/icons/TagIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import SearchIcon from '../../components/icons/SearchIcon';
 import BellIcon from '../../components/icons/BellIcon';
 import ChevronDownIcon from '../../components/icons/ChevronDownIcon';
-import CameraIcon from '../../components/icons/CameraIcon';
+import StoreIcon from '../../components/icons/StoreIcon';
 import type { PriceResponse } from '../../types/api.types';
-import { formatPrice, formatRelativeTime } from '../../utils/format';
+import { formatPrice, formatRelativeTime, getDistanceM, formatDistance } from '../../utils/format';
 import { POPULAR_TAGS, AD_BANNER_PLACEHOLDER } from '../../utils/constants';
+import { API_BASE_URL } from '../../utils/config';
 
 type Props = HomeScreenProps<'Home'>;
 
@@ -45,27 +47,44 @@ interface PriceCardData {
   maxPrice: number;
   storeCount: number;
   hasClosingDiscount: boolean;
-  confirmCount: number;
+  imageUrl: string | null;
+  quantity: number | null;
+  registrantNickname: string | null;
+  registrantProfileImage: string | null;
 }
 
-const groupPricesByProduct = (prices: PriceResponse[]): PriceCardData[] => {
+const groupPricesByProduct = (
+  prices: PriceResponse[],
+  userLat?: number,
+  userLng?: number,
+): PriceCardData[] => {
+  // 상품 이름 기준으로 그룹화 (같은 이름이면 같은 카드로 묶임)
   const map = new Map<string, PriceResponse[]>();
   prices.forEach((p) => {
-    const group = map.get(p.product.id) ?? [];
+    if (!p.product?.name) return; // product가 없으면 스킵
+    const key = p.product.name.trim().toLowerCase();
+    const group = map.get(key) ?? [];
     group.push(p);
-    map.set(p.product.id, group);
+    map.set(key, group);
   });
 
   return Array.from(map.values()).map((group) => {
     const sorted = [...group].sort((a, b) => a.price - b.price);
     const cheapest = sorted[0];
     const pricelist = sorted.map((p) => p.price);
+    const distanceText =
+      userLat != null &&
+      userLng != null &&
+      cheapest.store?.latitude != null &&
+      cheapest.store?.longitude != null
+        ? formatDistance(getDistanceM(userLat, userLng, cheapest.store.latitude, cheapest.store.longitude))
+        : '-';
     return {
-      productId: cheapest.product.id,
-      productName: cheapest.product.name,
-      unitType: cheapest.product.unitType,
-      storeName: cheapest.store.name,
-      distance: '-', // TODO: 위치 기반 실제 거리 계산 필요
+      productId: cheapest.product?.id ?? '',
+      productName: cheapest.product?.name ?? '알 수 없음',
+      unitType: cheapest.product?.unitType ?? 'other',
+      storeName: cheapest.store?.name ?? '매장 정보 없음',
+      distance: distanceText,
       time: formatRelativeTime(cheapest.createdAt),
       minPrice: Math.min(...pricelist),
       maxPrice: Math.max(...pricelist),
@@ -73,7 +92,10 @@ const groupPricesByProduct = (prices: PriceResponse[]): PriceCardData[] => {
       hasClosingDiscount: group.some(
         (p) => p.condition != null && p.condition.includes('마감'),
       ),
-      confirmCount: group.reduce((sum, p) => sum + p.likeCount, 0),
+      imageUrl: cheapest.imageUrl || null,
+      quantity: cheapest.quantity,
+      registrantNickname: cheapest.user?.nickname || null,
+      registrantProfileImage: cheapest.user?.profileImageUrl || null,
     };
   });
 };
@@ -81,8 +103,9 @@ const groupPricesByProduct = (prices: PriceResponse[]): PriceCardData[] => {
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const regionName = useLocationStore((s) => s.regionName) ?? '내 동네';
+  const userLat = useLocationStore((s) => s.latitude);
+  const userLng = useLocationStore((s) => s.longitude);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const fabScale = useRef(new Animated.Value(1)).current;
 
   const {
     data: recentPrices,
@@ -91,9 +114,23 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     refetch: refetchRecent,
   } = useRecentPrices();
 
+  const radius = useLocationStore((s) => s.radius);
+
+  // 설정된 동네 기준으로 반경 내 가격만 필터링
+  const nearbyPrices = useMemo(() => {
+    if (!recentPrices) return [];
+    if (userLat == null || userLng == null) return recentPrices;
+    return recentPrices.filter((p) => {
+      if (!p.store || p.store.latitude == null || p.store.longitude == null) return true;
+      if (isNaN(p.store.latitude) || isNaN(p.store.longitude)) return true;
+      const dist = getDistanceM(userLat, userLng, p.store.latitude, p.store.longitude);
+      return !isNaN(dist) && dist <= radius;
+    });
+  }, [recentPrices, userLat, userLng, radius]);
+
   const priceCards = useMemo(
-    () => groupPricesByProduct(recentPrices ?? []),
-    [recentPrices],
+    () => groupPricesByProduct(nearbyPrices, userLat ?? undefined, userLng ?? undefined),
+    [nearbyPrices, userLat, userLng],
   );
 
   const handleTagPress = useCallback((tag: string) => {
@@ -116,29 +153,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     setIsRefreshing(false);
   }, [refetchRecent]);
 
-  const handleFabPress = useCallback(() => {
-    navigation.navigate('PriceRegisterStack', {
-      screen: 'StoreSelect',
-    });
-  }, [navigation]);
-
-  const onFabPressIn = useCallback(() => {
-    Animated.spring(fabScale, {
-      toValue: 0.9,
-      useNativeDriver: true,
-      speed: 30,
-      bounciness: 0,
-    }).start();
-  }, [fabScale]);
-
-  const onFabPressOut = useCallback(() => {
-    Animated.spring(fabScale, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 8,
-    }).start();
-  }, [fabScale]);
 
   const ListHeader = useCallback(
     () => (
@@ -156,6 +170,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.tagChip}
                 onPress={() => handleTagPress(tag)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${tag} 태그 검색`}
               >
                 <Text style={styles.tagText}>{tag}</Text>
               </TouchableOpacity>
@@ -166,7 +182,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {/* 광고 배너 */}
         <View style={styles.adBanner}>
           <View style={styles.adStoreIcon}>
-            <Text style={styles.adStoreEmoji}>🏪</Text>
+            <StoreIcon size={spacing.iconSm} color={colors.adText} />
           </View>
           <View style={styles.adContent}>
             <Text style={styles.adStoreName}>{AD_BANNER_PLACEHOLDER.storeName}</Text>
@@ -179,7 +195,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.sectionTitle}>내 동네 실시간 가격</Text>
 
         {/* 로딩 / 에러 상태 */}
-        {isRecentLoading && <PriceCardSkeleton />}
+        {isRecentLoading && <SkeletonCard variant="price" />}
         {isRecentError && (
           <EmptyState
             icon={WifiOffIcon}
@@ -203,86 +219,131 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const listContentStyle = useMemo(
     () => [
       styles.listContent,
-      { paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.fabBottom + spacing.fabSize + spacing.sm },
+      { paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.md },
     ],
     [insets.bottom],
   );
 
-  const fabBottomStyle = useMemo(
-    () => ({ bottom: insets.bottom + spacing.tabBarContentHeight + spacing.fabBottom }),
-    [insets.bottom],
-  );
+
+  // ─── 이미지 URL 보정 (에뮬레이터 주소 → 실제 서버) ─────────────────────
+  const fixImageUrl = useCallback((url: string | null): string | null => {
+    if (!url || url.length === 0) return null;
+    if (url.startsWith('http')) {
+      return url.replace(/http:\/\/10\.0\.2\.2:\d+/, API_BASE_URL);
+    }
+    return `${API_BASE_URL}/${url}`;
+  }, []);
 
   // ─── 가격 카드 ─────────────────────────────────────────────────────────
   const renderPriceCard = useCallback(
-    ({ item }: ListRenderItemInfo<PriceCardData>) => (
-      <Pressable
-        style={({ pressed }) => [styles.priceCard, pressed && styles.priceCardPressed]}
-        onPress={() => handleCardPress(item)}
-        android_ripple={{ color: colors.gray200 }}
-      >
-        <View style={styles.cardColorBar} />
-        <View style={styles.cardBody}>
-          <View style={styles.cardLeft}>
-            <View style={styles.cardTitleRow}>
+    ({ item }: ListRenderItemInfo<PriceCardData>) => {
+      const imageUri = fixImageUrl(item.imageUrl);
+
+      return (
+        <Pressable
+          style={({ pressed }) => [styles.priceCard, pressed && styles.priceCardPressed]}
+          onPress={() => handleCardPress(item)}
+          android_ripple={{ color: colors.gray200 }}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.productName} ${item.minPrice}원`}
+        >
+          {/* 왼쪽: 이미지 썸네일 */}
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.cardImage}
+              resizeMode="cover"
+              accessible={true}
+              accessibilityLabel={`${item.productName} 상품 이미지`}
+            />
+          ) : (
+            <View style={styles.cardImagePlaceholder} accessible={true} accessibilityLabel="상품 이미지 없음">
+              <TagIcon size={28} color={colors.gray400} />
+            </View>
+          )}
+
+          {/* 오른쪽: 정보 */}
+          <View style={styles.cardContent}>
+            {/* 상품명 + 수량 */}
+            <View style={styles.cardHeader}>
               <Text style={styles.cardProductName} numberOfLines={1}>
                 {item.productName}
-                <Text style={styles.cardUnitType}> {item.unitType}</Text>
+                {item.quantity ? <Text style={styles.cardQuantity}> {item.quantity}개</Text> : null}
               </Text>
               {item.hasClosingDiscount && (
                 <View style={styles.closingBadge}>
-                  <Text style={styles.closingBadgeText}>마감할인</Text>
+                  <Text style={styles.closingBadgeText}>마감</Text>
                 </View>
               )}
             </View>
+
+            {/* 가격 */}
+            <Text style={styles.cardMinPrice}>
+              {formatPrice(item.minPrice)}
+              {item.storeCount > 1 && item.maxPrice > item.minPrice && (
+                <Text style={styles.cardMaxPrice}> ~ {formatPrice(item.maxPrice)}</Text>
+              )}
+            </Text>
+
+            {/* 매장 · 거리 · 시간 */}
             <Text style={styles.cardMeta} numberOfLines={1}>
-              {item.storeName}
-              <Text style={styles.cardMetaDot}> · </Text>
-              {item.distance}
-              <Text style={styles.cardMetaDot}> · </Text>
-              {item.time}
+              {item.storeName} · {item.distance} · {item.time}
+            </Text>
+
+            {/* 등록자 닉네임 */}
+            {item.registrantNickname && (
+              <Text style={styles.cardRegistrant} numberOfLines={1}>
+                by {item.registrantNickname}
+              </Text>
+            )}
+
+            {/* 비교 */}
+            <Text style={styles.cardCompare}>
+              {item.storeCount}곳 비교 {'>'}
             </Text>
           </View>
-          <View style={styles.cardRight}>
-            <Text style={styles.cardMinPrice}>{formatPrice(item.minPrice)}</Text>
-            {item.storeCount > 1 && (
-              <Text style={styles.cardMaxPrice}>{formatPrice(item.maxPrice)}</Text>
-            )}
-            <Text style={styles.cardCompare}>{item.storeCount}곳 비교</Text>
-            {item.confirmCount > 0 && (
-              <Text style={styles.cardConfirm}>✓ {item.confirmCount}</Text>
-            )}
-          </View>
-        </View>
-      </Pressable>
-    ),
-    [handleCardPress],
+        </Pressable>
+      );
+    },
+    [handleCardPress, fixImageUrl],
   );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ─── 헤더 ────────────────────────────────────────────────────── */}
       <View style={styles.header}>
-        {/* TODO: 동네 변경 기능 구현 시 TouchableOpacity로 교체 */}
-        <View style={styles.regionButton}>
+        <TouchableOpacity
+          style={styles.regionButton}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
+          accessibilityRole="button"
+          accessibilityLabel={`${regionName} 지역 변경`}
+        >
           <Text style={styles.regionText}>{regionName}</Text>
           <ChevronDownIcon size={14} color={colors.black} />
-        </View>
+        </TouchableOpacity>
         <View style={styles.headerIcons}>
           <TouchableOpacity
             style={styles.headerIconBtn}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
+            accessibilityRole="button"
+            accessibilityLabel="검색"
           >
             <SearchIcon size={22} color={colors.black} />
           </TouchableOpacity>
-          {/* TODO: 알림 기능 구현 시 TouchableOpacity로 교체 */}
-          <View style={styles.headerIconBtn}>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="알림"
+            onPress={() => Alert.alert('알림', '알림 기능이 곧 추가될 예정이에요!')}
+          >
             <View>
               <BellIcon size={22} color={colors.black} />
               <View style={styles.notifDot} />
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -292,6 +353,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.searchBar}
           onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="상품 이름을 검색하세요"
         >
           <SearchIcon size={18} color={colors.gray400} />
           <Text style={styles.searchPlaceholder}>상품 이름을 검색하세요</Text>
@@ -316,28 +379,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           ListHeaderComponent={ListHeader}
         />
 
-      {/* ─── FAB ─────────────────────────────────────────────────────── */}
-      {/* fabShadow: shadow wrapper (overflow visible 필요) */}
-      {/* fab: overflow:hidden wrapper for ripple clip */}
-      <Animated.View
-        style={[
-          styles.fabShadow,
-          fabBottomStyle,
-          { transform: [{ scale: fabScale }] },
-        ]}
-      >
-        <View style={styles.fab}>
-          <Pressable
-            onPress={handleFabPress}
-            onPressIn={onFabPressIn}
-            onPressOut={onFabPressOut}
-            style={styles.fabPressable}
-            android_ripple={{ color: colors.fabRipple, borderless: false }}
-          >
-            <CameraIcon size={26} color={colors.white} />
-          </Pressable>
-        </View>
-      </Animated.View>
+      {/* FAB 제거됨 — 등록은 하단 탭의 "등록" 버튼으로 접근 */}
     </View>
   );
 };
@@ -371,8 +413,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   headerIconBtn: {
-    width: 40,
-    height: 40,
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -380,9 +422,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: spacing.notifDotSize,
+    height: spacing.notifDotSize,
+    borderRadius: spacing.xs,
     backgroundColor: colors.danger,
     borderWidth: 1,
     borderColor: colors.white,
@@ -398,8 +440,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.gray100,
-    borderRadius: 10,
-    paddingHorizontal: 14, // no exact spacing token (between md:12 and lg:16)
+    borderRadius: spacing.radiusMd,
+    paddingHorizontal: spacing.inputPad,
     paddingVertical: spacing.md,
     gap: spacing.sm,
   },
@@ -411,49 +453,61 @@ const styles = StyleSheet.create({
 
   // ─── 리스트 ────────────────────────────────────────────────────────────
   listContent: {
-    paddingTop: spacing.headerContent,
-    paddingHorizontal: spacing.xl,
-    gap: spacing.sectionGap,
+    paddingTop: spacing.sm,
+    paddingHorizontal: 0,
+    gap: spacing.sm,
   },
 
   // ─── 인기 태그 ─────────────────────────────────────────────────────────
-  section: {},
+  section: {
+    paddingHorizontal: spacing.lg,
+  },
   tagsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: spacing.micro,
   },
   tagChip: {
-    backgroundColor: colors.gray100,
-    borderRadius: 20,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusFull,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   tagText: {
     ...typography.tagText,
+    fontWeight: '500' as const,
   },
 
   // ─── 광고 배너 ─────────────────────────────────────────────────────────
   adBanner: {
     backgroundColor: colors.adBg,
-    borderRadius: spacing.md,
+    borderRadius: spacing.radiusMd,
     padding: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
   },
   adStoreIcon: {
-    width: 44,
-    height: 44,
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
     backgroundColor: colors.white,
-    borderRadius: 10,
+    borderRadius: spacing.radiusMd,
     borderWidth: 0.5,
     borderColor: colors.gray200,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adStoreEmoji: {
-    fontSize: 22,
+    fontSize: spacing.xxl,
   },
   adContent: {
     flex: 1,
@@ -462,7 +516,7 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '600' as const,
     color: colors.gray900,
-    marginBottom: 2,
+    marginBottom: spacing.micro,
   },
   adInfo: {
     ...typography.bodySm,
@@ -478,80 +532,90 @@ const styles = StyleSheet.create({
 
   // ─── 섹션 제목 ─────────────────────────────────────────────────────────
   sectionTitle: {
-    ...typography.headingLg,
-    marginBottom: -spacing.cardGap,
+    ...typography.headingXl,
+    fontWeight: '700' as const,
+    color: colors.black,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.lg,
   },
 
-  // ─── 가격 카드 ─────────────────────────────────────────────────────────
+  // ─── 가격 카드 (당근마켓 스타일: 구분선, 그림자 없음, 촘촘) ──────────
   priceCard: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: colors.gray200,
     flexDirection: 'row',
+    borderRadius: spacing.radiusLg,
+    marginBottom: spacing.sm,
+    marginHorizontal: spacing.lg,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
     overflow: 'hidden',
-    marginBottom: spacing.cardGap,
   },
   priceCardPressed: {
-    opacity: 0.7,
+    opacity: 0.9,
   },
-  cardColorBar: {
-    width: 3,
-    backgroundColor: colors.primary,
-    borderRadius: 2,
-    marginVertical: spacing.md,
-    marginLeft: 14, // no exact token
+  cardImage: {
+    width: spacing.cardImageSize,
+    height: spacing.cardImageSize,
+    borderRadius: spacing.radiusMd,
+    margin: spacing.md,
   },
-  cardBody: {
+  cardImagePlaceholder: {
+    width: spacing.cardImageSize,
+    height: spacing.cardImageSize,
+    borderRadius: spacing.radiusMd,
+    margin: spacing.md,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardContent: {
     flex: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.lg,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.lg,
-  },
-  cardLeft: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6, // no exact token (between xs:4 and sm:8)
-    flexWrap: 'wrap',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   cardProductName: {
-    ...typography.headingMd,
+    ...typography.headingLg,
+    flex: 1,
+    marginRight: spacing.sm,
   },
-  cardUnitType: {
-    ...typography.tagText,
-    fontWeight: '400' as const,
-    color: colors.gray600,
-  },
-  cardMeta: {
+  cardQuantity: {
     ...typography.bodySm,
-  },
-  cardMetaDot: {
-    color: colors.cardDivider,
-  },
-  cardRight: {
-    alignItems: 'flex-end',
-    gap: 2,
+    color: colors.gray600,
+    fontWeight: '400' as const,
   },
   cardMinPrice: {
     ...typography.price,
+    marginBottom: 2,
   },
   cardMaxPrice: {
+    fontSize: 14,
+    color: colors.gray600,
+    fontWeight: '400' as const,
+  },
+  cardMeta: {
+    ...typography.bodySm,
+    color: colors.gray600,
+    marginBottom: 2,
+  },
+  cardRegistrant: {
     ...typography.caption,
     color: colors.gray400,
+    marginBottom: 4,
+    fontStyle: 'italic',
   },
   cardCompare: {
-    ...typography.captionBold,
-    color: colors.primary,
-  },
-  cardConfirm: {
-    ...typography.caption,
+    ...typography.bodySm,
+    fontWeight: '600' as const,
     color: colors.primary,
   },
 
@@ -559,11 +623,11 @@ const styles = StyleSheet.create({
   closingBadge: {
     backgroundColor: colors.dangerLight,
     borderRadius: spacing.xs,
-    paddingHorizontal: 6, // no exact token
-    paddingVertical: 2,   // no exact token
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.micro,
   },
   closingBadgeText: {
-    fontSize: 10,
+    ...typography.caption,
     fontWeight: '700' as const,
     color: colors.danger,
   },
@@ -574,7 +638,7 @@ const styles = StyleSheet.create({
     right: spacing.fabRight,
     width: spacing.fabSize,
     height: spacing.fabSize,
-    borderRadius: 16,
+    borderRadius: spacing.radiusLg,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -583,7 +647,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: spacing.radiusLg,
     backgroundColor: colors.black,
     overflow: 'hidden',
   },

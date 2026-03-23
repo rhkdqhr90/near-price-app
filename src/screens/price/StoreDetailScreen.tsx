@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
+  Alert,
 } from 'react-native';
 import type { HomeScreenProps } from '../../navigation/types';
 import { colors } from '../../theme/colors';
@@ -27,21 +28,79 @@ const STORE_TYPE_LABELS: Record<StoreResponse['type'], string> = {
   traditional_market: '전통시장',
 };
 
-const openNaverMapRoute = (lat: number, lng: number, name: string) => {
-  const appUrl = `nmap://route/walk?dlat=${lat}&dlng=${lng}&dname=${encodeURIComponent(name)}&appname=com.nearprice`;
-  const webUrl = `https://map.naver.com/v5/directions/-/${lng},${lat},${encodeURIComponent(name)}/-/walk`;
-  Linking.canOpenURL(appUrl).then((supported) => {
-    Linking.openURL(supported ? appUrl : webUrl);
-  });
+interface MapApp {
+  name: string;
+  appUrl: (lat: number, lng: number, name: string) => string;
+  webUrl: (lat: number, lng: number, name: string) => string;
+  scheme: string;
+}
+
+const MAP_APPS: MapApp[] = [
+  {
+    name: '네이버 지도',
+    appUrl: (lat, lng, name) => `nmap://route/walk?dlat=${lat}&dlng=${lng}&dname=${encodeURIComponent(name)}&appname=com.nearprice`,
+    webUrl: (lat, lng, name) => `https://map.naver.com/v5/directions/-/${lng},${lat},${encodeURIComponent(name)}/-/walk`,
+    scheme: 'nmap://',
+  },
+  {
+    name: '카카오맵',
+    appUrl: (lat, lng, name) => `kakaomap://look?p=${lat},${lng}&name=${encodeURIComponent(name)}`,
+    webUrl: (lat, lng) => `https://map.kakao.com/link/map/${lat},${lng}`,
+    scheme: 'kakaomap://',
+  },
+  {
+    name: '구글맵',
+    appUrl: (lat, lng) => `google.navigation:q=${lat},${lng}`,
+    webUrl: (lat, lng) => `https://www.google.com/maps?q=${lat},${lng}`,
+    scheme: 'google.navigation://',
+  },
+];
+
+const openMapApp = async (lat: number, lng: number, name: string) => {
+  const availableApps: Array<{ name: string; url: string }> = [];
+
+  for (const app of MAP_APPS) {
+    const supported = await Linking.canOpenURL(app.scheme);
+    if (supported) {
+      availableApps.push({
+        name: app.name,
+        url: app.appUrl(lat, lng, name),
+      });
+    }
+  }
+
+  // 네이버 지도가 없으면 다른 앱 확인, 모두 없으면 웹 폴백
+  if (availableApps.length === 0) {
+    Linking.openURL(MAP_APPS[0].webUrl(lat, lng, name));
+    return;
+  }
+
+  if (availableApps.length === 1) {
+    Linking.openURL(availableApps[0].url);
+    return;
+  }
+
+  // 여러 앱이 있으면 선택
+  Alert.alert(
+    '지도 앱 선택',
+    '어떤 지도 앱으로 열까요?',
+    [
+      ...availableApps.map((app) => ({
+        text: app.name,
+        onPress: () => Linking.openURL(app.url),
+      })),
+      { text: '취소', style: 'cancel' },
+    ]
+  );
 };
 
 const StoreDetailScreen: React.FC<Props> = ({ route }) => {
   const { storeId } = route.params;
   const { data: store, isLoading, isError, refetch } = useStoreDetail(storeId);
 
-  const handleDirections = useCallback(() => {
+  const handleDirections = useCallback(async () => {
     if (!store) return;
-    openNaverMapRoute(store.latitude, store.longitude, store.name);
+    await openMapApp(store.latitude, store.longitude, store.name);
   }, [store]);
 
   if (isLoading) {
@@ -50,6 +109,10 @@ const StoreDetailScreen: React.FC<Props> = ({ route }) => {
   if (isError || !store) {
     return <ErrorView message="매장 정보를 불러오지 못했습니다" onRetry={refetch} />;
   }
+
+  // 마커 좌표가 유효한지 확인
+  const isValidMarker = typeof store.latitude === 'number' && typeof store.longitude === 'number'
+    && !isNaN(store.latitude) && !isNaN(store.longitude);
 
   return (
     <View style={styles.container}>
@@ -68,12 +131,14 @@ const StoreDetailScreen: React.FC<Props> = ({ route }) => {
           mapType="Basic"
           locale="ko"
         >
-          <NaverMapMarkerOverlay
-            latitude={store.latitude}
-            longitude={store.longitude}
-            tintColor={colors.primary}
-            caption={{ text: store.name, textSize: 12, color: colors.primary }}
-          />
+          {isValidMarker && (
+            <NaverMapMarkerOverlay
+              latitude={store.latitude}
+              longitude={store.longitude}
+              tintColor={colors.primary}
+              caption={{ text: store.name, textSize: 12, color: colors.primary }}
+            />
+          )}
         </MapViewWrapper>
       </View>
 
@@ -89,8 +154,10 @@ const StoreDetailScreen: React.FC<Props> = ({ route }) => {
           style={styles.directionsButton}
           onPress={handleDirections}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${store.name}으로 길찾기`}
         >
-          <Text style={styles.directionsButtonText}>네이버 지도로 길찾기</Text>
+          <Text style={styles.directionsButtonText}>지도로 길찾기</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -118,7 +185,7 @@ const styles = StyleSheet.create({
   },
   storeTypeBadge: {
     backgroundColor: colors.primary,
-    borderRadius: 4,
+    borderRadius: spacing.xs,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
   },
@@ -134,7 +201,7 @@ const styles = StyleSheet.create({
   },
   directionsButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: spacing.sm,
     paddingVertical: spacing.lg,
     alignItems: 'center',
   },

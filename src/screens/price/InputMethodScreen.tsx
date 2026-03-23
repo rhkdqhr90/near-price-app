@@ -24,7 +24,7 @@ const InputMethodScreen: React.FC<Props> = ({ navigation }) => {
   }, [navigation]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.md }]}>
       <View style={styles.header}>
         <Text style={styles.storeLabel}>선택한 매장</Text>
         <Text style={styles.storeName} numberOfLines={1}>{storeName ?? ''}</Text>
@@ -33,7 +33,7 @@ const InputMethodScreen: React.FC<Props> = ({ navigation }) => {
       <Text style={styles.title}>어떻게 등록할까요?</Text>
 
       <View style={styles.cards}>
-        <TouchableOpacity style={styles.methodCard} onPress={handleCamera} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.methodCard} onPress={handleCamera} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="사진으로 등록">
           <View style={styles.iconWrap}>
             <CameraIcon size={32} color={colors.primary} />
           </View>
@@ -41,7 +41,7 @@ const InputMethodScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.methodDesc}>가격표를 촬영하면{'\n'}자동으로 인식해요</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.methodCard} onPress={handleManual} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.methodCard} onPress={handleManual} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="직접 입력">
           <View style={styles.iconWrap}>
             <EditIcon size={32} color={colors.primary} />
           </View>
@@ -62,30 +62,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: colors.gray200,
   },
-  storeLabel: { fontSize: 12, fontWeight: '500' as const, color: colors.gray400, marginBottom: 2 },
+  storeLabel: { ...typography.bodySm, fontWeight: '500' as const, color: colors.gray400, marginBottom: spacing.micro },
   storeName: { ...typography.headingMd },
-  title: { ...typography.headingXl, paddingHorizontal: spacing.xl, paddingTop: 32, paddingBottom: 20 },
-  cards: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: 12 },
+  title: { ...typography.headingXl, paddingHorizontal: spacing.xl, paddingTop: spacing.xl + spacing.lg + spacing.md, paddingBottom: spacing.lg },
+  cards: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.md },
   methodCard: {
     flex: 1,
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: spacing.radiusLg,
     borderWidth: 0.5,
     borderColor: colors.gray200,
-    padding: 24,
+    padding: spacing.xxl,
     alignItems: 'center',
   },
   iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
+    width: spacing.cameraControlSize + spacing.md + spacing.md,
+    height: spacing.cameraControlSize + spacing.md + spacing.md,
+    borderRadius: spacing.radiusLg,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: spacing.md + spacing.sm,
   },
-  methodTitle: { ...typography.headingMd, marginBottom: 8, textAlign: 'center' },
-  methodDesc: { ...typography.bodySm, textAlign: 'center', lineHeight: 18 },
+  methodTitle: { ...typography.headingMd, marginBottom: spacing.sm, textAlign: 'center' },
+  methodDesc: { ...typography.bodySm, textAlign: 'center', lineHeight: spacing.xl },
 });
 
 export default InputMethodScreen;

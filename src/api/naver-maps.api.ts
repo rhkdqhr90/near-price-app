@@ -42,7 +42,10 @@ export interface NcpPlaceItem {
 export const naverMapsApi = {
   // 역지오코딩: 좌표 → 주소
   reverseGeocode: (longitude: number, latitude: number) =>
-    naverMapsClient.get<{ status: { code: number }; results: NaverRegionResult[] }>(
+    naverMapsClient.get<{
+      status: { code: number; name: string; message: string };
+      results: NaverRegionResult[];
+    }>(
       '/map-reversegeocode/v2/gc',
       { params: { coords: `${longitude},${latitude}`, output: 'json', orders: 'admcode' } },
     ),

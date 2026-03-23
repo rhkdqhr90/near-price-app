@@ -1,13 +1,16 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   type ListRenderItemInfo,
+  RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { MyPageScreenProps } from '../../navigation/types';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { MyPageScreenProps, MainTabParamList } from '../../navigation/types';
 import type { PriceResponse } from '../../types/api.types';
 import { useMyPrices } from '../../hooks/queries/usePrices';
 import LoadingView from '../../components/common/LoadingView';
@@ -23,34 +26,63 @@ type Props = MyPageScreenProps<'MyPriceList'>;
 
 interface PriceListItemProps {
   item: PriceResponse;
+  onPress: (productId: string, productName: string) => void;
 }
 
-const PriceListItem = React.memo<PriceListItemProps>(({ item }) => (
-  <View style={styles.card}>
+const PriceListItem = React.memo<PriceListItemProps>(({ item, onPress }) => (
+  <TouchableOpacity
+    style={styles.card}
+    onPress={() => item.product?.id && onPress(item.product.id, item.product.name)}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel={`${item.product?.name ?? '상품'} ${formatPrice(item.price)} ${item.store?.name ?? '매장'}`}
+  >
     <View style={styles.colorBar} />
     <View style={styles.cardBody}>
       <Text style={styles.productName} numberOfLines={1}>
-        {item.product.name}
+        {item.product?.name ?? '알 수 없음'}
       </Text>
       <Text style={styles.storeName} numberOfLines={1}>
-        {item.store.name}
+        {item.store?.name ?? '매장 정보 없음'}
       </Text>
     </View>
     <View style={styles.cardRight}>
       <Text style={styles.priceValue}>{formatPrice(item.price)}</Text>
       <Text style={styles.priceTime}>{formatRelativeTime(item.createdAt)}</Text>
     </View>
-  </View>
+  </TouchableOpacity>
 ));
 
-const MyPriceListScreen: React.FC<Props> = () => {
+const MyPriceListScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { data: myPrices, isLoading, isError, refetch } = useMyPrices();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleNavigatePriceCompare = useCallback(
+    (productId: string, productName: string) => {
+      navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('HomeStack', {
+        screen: 'PriceCompare',
+        params: { productId, productName },
+      });
+    },
+    [navigation],
+  );
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<PriceResponse>) => <PriceListItem item={item} />,
-    [],
+    ({ item }: ListRenderItemInfo<PriceResponse>) => (
+      <PriceListItem item={item} onPress={handleNavigatePriceCompare} />
+    ),
+    [handleNavigatePriceCompare],
   );
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch]);
 
   if (isLoading) {
     return <LoadingView message="등록 이력을 불러오는 중..." />;
@@ -64,11 +96,18 @@ const MyPriceListScreen: React.FC<Props> = () => {
   return (
     <FlatList
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}
+      contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl }]}
       data={myPrices ?? []}
       keyExtractor={item => item.id}
       renderItem={renderItem}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+        />
+      }
       ListEmptyComponent={
         <EmptyState
           icon={TagIcon}
@@ -94,7 +133,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: spacing.radiusMd,
     borderWidth: 0.5,
     borderColor: colors.gray200,
     overflow: 'hidden',
@@ -106,7 +145,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginVertical: spacing.md,
     marginLeft: spacing.inputPad,
-    borderRadius: 2,
+    borderRadius: spacing.micro,
   },
   cardBody: {
     flex: 1,

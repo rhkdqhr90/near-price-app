@@ -7,7 +7,6 @@ import { colors } from '../../theme/colors';
 
 type Props = MyPageScreenProps<'LikedPrices'>;
 
-// TODO: 좋아요한 가격 목록 API 연동 — 현재는 플레이스홀더 화면
 const LikedPricesScreen: React.FC<Props> = () => (
   <View style={styles.container}>
     <EmptyState

@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   SectionList,
   TouchableOpacity,
   StyleSheet,
+  LayoutAnimation,
+  RefreshControl,
 } from 'react-native';
 import type { MyPageScreenProps } from '../../navigation/types';
 import { useFaqList } from '../../hooks/queries/useFaq';
@@ -13,7 +15,7 @@ import ChevronDownIcon from '../../components/icons/ChevronDownIcon';
 import ChevronUpIcon from '../../components/icons/ChevronUpIcon';
 import LoadingView from '../../components/common/LoadingView';
 import ErrorView from '../../components/common/ErrorView';
-import EmptyView from '../../components/common/EmptyView';
+import EmptyState from '../../components/common/EmptyState';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -32,6 +34,9 @@ const FaqItem = React.memo<FaqItemProps>(({ item, isExpanded, onToggle }) => (
       style={styles.questionRow}
       onPress={() => onToggle(item.id)}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`질문: ${item.question}`}
+      accessibilityState={{ expanded: isExpanded }}
     >
       <Text style={styles.questionPrefix}>Q.</Text>
       <Text style={styles.questionText}>{item.question}</Text>
@@ -52,28 +57,46 @@ const FaqItem = React.memo<FaqItemProps>(({ item, isExpanded, onToggle }) => (
 
 const FaqScreen: React.FC<Props> = () => {
   const { data, isLoading, isError, refetch } = useFaqList();
-  // useRef로 Set 관리하여 renderItem이 매 토글마다 재생성되는 것을 방지
-  const expandedIdsRef = useRef<Set<string>>(new Set());
-  const [, forceUpdate] = useState(0);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleToggle = useCallback((id: string) => {
-    if (expandedIdsRef.current.has(id)) {
-      expandedIdsRef.current.delete(id);
-    } else {
-      expandedIdsRef.current.add(id);
-    }
-    forceUpdate((n) => n + 1);
+    LayoutAnimation.configureNext(
+      LayoutAnimation.create(
+        200,
+        LayoutAnimation.Types.easeInEaseOut,
+        LayoutAnimation.Properties.opacity
+      )
+    );
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch]);
 
   const renderItem = useCallback(
     ({ item }: { item: FaqItemResponse }) => (
       <FaqItem
         item={item}
-        isExpanded={expandedIdsRef.current.has(item.id)}
+        isExpanded={expandedIds.has(item.id)}
         onToggle={handleToggle}
       />
     ),
-    [handleToggle],
+    [expandedIds, handleToggle],
   );
 
   const renderSectionHeader = useCallback(
@@ -97,7 +120,7 @@ const FaqScreen: React.FC<Props> = () => {
     return <ErrorView message="FAQ를 불러오지 못했습니다" onRetry={refetch} />;
   }
   if (!data || data.length === 0) {
-    return <EmptyView message="등록된 FAQ가 없습니다" />;
+    return <EmptyState title="등록된 FAQ가 없습니다" />;
   }
 
   return (
@@ -108,6 +131,13 @@ const FaqScreen: React.FC<Props> = () => {
       renderItem={renderItem}
       renderSectionHeader={renderSectionHeader}
       stickySectionHeadersEnabled={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+        />
+      }
     />
   );
 };

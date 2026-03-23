@@ -1,6 +1,27 @@
+/*
+ * 프로덕션 빌드를 위한 키스토어 생성 방법:
+ *
+ * 1. 키스토어 생성 명령어:
+ *    keytool -genkey -v -keystore near-price-release-key.keystore \
+ *      -keyalg RSA -keysize 2048 -validity 10000 \
+ *      -alias near-price-key
+ *
+ * 2. 환경 변수 설정:
+ *    export RELEASE_KEYSTORE_FILE="/path/to/near-price-release-key.keystore"
+ *    export RELEASE_KEYSTORE_PASSWORD="your_keystore_password"
+ *    export RELEASE_KEY_ALIAS="near-price-key"
+ *    export RELEASE_KEY_PASSWORD="your_key_password"
+ *
+ * 3. 빌드 명령어:
+ *    cd android && ./gradlew assembleRelease
+ *
+ * 생성된 APK는 app/build/outputs/apk/release/app-release.apk에 위치합니다.
+ */
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
 apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
 
 /**
@@ -84,8 +105,12 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
-        manifestPlaceholders = [KAKAO_APP_KEY: "cc8e57665bb4c755e02cdede887ce580", NAVER_MAP_CLIENT_ID: "tj8tdvye4g"]
+        versionName "1.0.0"
+        // API 키는 환경 변수에서 읽음 (보안: 하드코딩 방지)
+        manifestPlaceholders = [
+            KAKAO_APP_KEY: System.getenv("KAKAO_APP_KEY") ?: "KAKAO_APP_KEY_NOT_SET",
+            NAVER_MAP_CLIENT_ID: System.getenv("NAVER_MAP_CLIENT_ID") ?: "NAVER_MAP_CLIENT_ID_NOT_SET"
+        ]
     }
     signingConfigs {
         debug {
@@ -93,6 +118,15 @@ android {
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
+        }
+        release {
+            // 프로덕션 환경에서 사용할 키스토어 설정
+            // 환경 변수에서 키스토어 경로, 비밀번호, 키 별칭을 읽음
+            // 예: RELEASE_KEYSTORE_FILE, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+            storeFile file(System.getenv("RELEASE_KEYSTORE_FILE") ?: "debug.keystore")
+            storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("RELEASE_KEY_ALIAS")
+            keyPassword System.getenv("RELEASE_KEY_PASSWORD")
         }
     }
     buildTypes {
@@ -102,8 +136,9 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
-            minifyEnabled enableProguardInReleaseBuilds
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
