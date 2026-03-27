@@ -33,4 +33,25 @@ export const userApi = {
     );
     return response.data;
   },
+
+  getUser: async (userId: string) => {
+    const response = await apiClient.get<UserResponse>(`/user/${userId}`);
+    return response.data;
+  },
+
+  updateNotificationSettings: async (
+    userId: string,
+    settings: { notifPriceChange?: boolean; notifPromotion?: boolean },
+  ) => {
+    const response = await apiClient.patch<{ success: boolean }>(
+      `/user/${userId}/notification-settings`,
+      settings,
+    );
+    return response.data;
+  },
+
+  deleteAccount: async () => {
+    const response = await apiClient.delete<{ success: boolean }>('/user/me');
+    return response.data;
+  },
 };

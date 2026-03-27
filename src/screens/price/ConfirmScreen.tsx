@@ -34,35 +34,43 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
   const { mutate: submitAll, isPending } = useMutation({
     mutationFn: async (confirmItems: ConfirmItem[]) => {
       if (!storeId) throw new Error('매장 정보가 없습니다.');
-      succeededIndicesRef.current = [];
+      let failedCount = 0;
       for (let i = 0; i < confirmItems.length; i++) {
+        if (succeededIndicesRef.current.includes(i)) continue;
         const item = confirmItems[i];
-        let imageUrl = '';
-        if (item.imageUri) {
-          const upload = await uploadApi.uploadImage(item.imageUri, 'price.jpg', 'image/jpeg');
-          imageUrl = upload.data?.url ?? '';
+        try {
+          let imageUrl = '';
+          if (item.imageUri) {
+            const upload = await uploadApi.uploadImage(item.imageUri, 'price.jpg', 'image/jpeg');
+            imageUrl = upload.data?.url ?? '';
+          }
+          let productId = item.productId;
+          if (!productId) {
+            const product = await productApi.create({
+              name: item.productName,
+              category: 'other',
+              unitType: item.unitType ?? 'other',
+            });
+            productId = product.data.id;
+          }
+          const dto: CreatePriceDto = {
+            storeId,
+            productId,
+            price: item.price,
+            imageUrl,
+            quantity: item.quantity,
+            saleStartDate: item.eventStart,
+            saleEndDate: item.eventEnd,
+            condition: item.condition,
+          };
+          await priceApi.create(dto);
+          succeededIndicesRef.current.push(i);
+        } catch {
+          failedCount += 1;
         }
-        let productId = item.productId;
-        if (!productId) {
-          const product = await productApi.create({
-            name: item.productName,
-            category: 'other',
-            unitType: item.unitType ?? 'other',
-          });
-          productId = product.data.id;
-        }
-        const dto: CreatePriceDto = {
-          storeId,
-          productId,
-          price: item.price,
-          imageUrl,
-          quantity: item.quantity,
-          saleStartDate: item.eventStart,
-          saleEndDate: item.eventEnd,
-          condition: item.condition,
-        };
-        await priceApi.create(dto);
-        succeededIndicesRef.current.push(i);
+      }
+      if (failedCount > 0) {
+        throw new Error(`${failedCount}개 항목 등록 실패`);
       }
     },
     onSuccess: () => {
@@ -213,7 +221,7 @@ const styles = StyleSheet.create({
   itemInfo: { flex: 1 },
   itemName: { ...typography.headingMd, marginBottom: spacing.cardTextGap },
   itemPrice: { ...typography.price },
-  itemUnit: { ...typography.bodySm, color: colors.gray400, marginTop: spacing.micro },
+  itemUnit: { ...typography.bodySm, color: colors.gray600, marginTop: spacing.micro },
   itemActions: { gap: spacing.xs + spacing.micro },
   editBtn: {
     backgroundColor: colors.primaryLight,
@@ -232,7 +240,7 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { ...typography.bodySm, fontWeight: '600' as const, color: colors.danger },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyText: { ...typography.body, color: colors.gray400 },
+  emptyText: { ...typography.body, color: colors.gray600 },
   footer: {
     backgroundColor: colors.white,
     paddingHorizontal: spacing.xl,

@@ -1,12 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { verificationApi } from '../../api/verification.api';
+import { priceKeys } from './usePrices';
 import type {
   VerificationListResponse,
+  MyVerificationsResponse,
   CreateVerificationDto,
 } from '../../types/api.types';
 
 export const verificationKeys = {
   detail: (priceId: string) => ['verifications', priceId] as const,
+  mine: ['verifications', 'my'] as const,
 };
 
 /**
@@ -18,6 +21,15 @@ export const useVerifications = (priceId: string) =>
     queryFn: () =>
       verificationApi.getVerifications(priceId, 1, 5).then((res) => res.data),
     enabled: !!priceId,
+  });
+
+/**
+ * 내가 검증한 가격 목록 조회
+ */
+export const useMyVerifications = () =>
+  useQuery<MyVerificationsResponse>({
+    queryKey: verificationKeys.mine,
+    queryFn: () => verificationApi.getMyVerifications().then((res) => res.data),
   });
 
 /**
@@ -34,7 +46,11 @@ export const useVerifyPrice = (priceId: string) => {
       });
       // 가격 정보도 갱신
       queryClient.invalidateQueries({
-        queryKey: ['price', priceId],
+        queryKey: priceKeys.detail(priceId),
+      });
+      // 내가 인정한 가격 목록 갱신
+      queryClient.invalidateQueries({
+        queryKey: verificationKeys.mine,
       });
     },
   });

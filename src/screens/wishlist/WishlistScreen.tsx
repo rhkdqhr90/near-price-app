@@ -8,10 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MainTabScreenProps } from '../../navigation/types';
 import type { WishlistItem } from '../../types/api.types';
 import { useMyWishlist, useRemoveWishlist } from '../../hooks/queries/useWishlist';
-import EmptyState from '../../components/common/EmptyState';
 import SkeletonCard from '../../components/common/SkeletonCard';
 import HeartIcon from '../../components/icons/HeartIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
+import MapPinIcon from '../../components/icons/MapPinIcon';
 import { formatPrice } from '../../utils/format';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -145,32 +145,77 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
     </Swipeable>
   ), [handleItemPress, handleDelete, renderDeleteAction]);
 
-  if (isLoading) return <SkeletonCard variant="wishlist" />;
-  if (isError) {
-    return (
-      <EmptyState
-        icon={WifiOffIcon}
-        title="불러올 수 없어요"
-        subtitle="네트워크 상태를 확인하고 다시 시도해 주세요."
-        action={{ label: '다시 시도', onPress: refetch }}
-      />
-    );
-  }
-
   const items = wishlist?.items ?? [];
+
+  // ─── 빈 상태 ────────────────────────────────────────────────────────────
+  const renderEmptyState = useCallback(() => {
+    if (isError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCard}>
+            <WifiOffIcon size={64} color={colors.gray400} />
+          </View>
+          <Text style={styles.emptyTitle}>불러올 수 없어요</Text>
+          <Text style={styles.emptySubtitle}>네트워크 상태를 확인하고 다시 시도해 주세요.</Text>
+          <TouchableOpacity style={styles.emptyButton} onPress={() => refetch()} activeOpacity={0.8}>
+            <Text style={styles.emptyButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        {/* 장식 배경 */}
+        <View style={styles.emptyDecorCircle} />
+        <View style={styles.emptyIconCard}>
+          <HeartIcon size={80} color={colors.primary} filled />
+        </View>
+
+        {/* 텍스트 */}
+        <Text style={styles.emptyTitle}>찜한 항목이 없습니다.</Text>
+        <Text style={styles.emptySubtitle}>
+          마음에 드는 상품을 찜해보세요!{'\n'}좋아하는 상품을 여기서 확인하실 수 있습니다.
+        </Text>
+
+        {/* CTA */}
+        <TouchableOpacity
+          style={styles.emptyButton}
+          onPress={() => navigation.navigate('HomeStack', { screen: 'Home' })}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="홈으로 이동하여 상품 둘러보기"
+        >
+          <Text style={styles.emptyButtonText}>지금 둘러보기</Text>
+        </TouchableOpacity>
+
+        {/* 큐레이션 팁 카드 */}
+        <View style={styles.tipCard}>
+          <View style={styles.tipIconWrap}>
+            <Text style={styles.tipEmoji}>💡</Text>
+          </View>
+          <View style={styles.tipTextWrap}>
+            <Text style={styles.tipLabel}>큐레이션 팁</Text>
+            <Text style={styles.tipBody}>가격 카드의 하트 아이콘을 누르면 나중에 볼 수 있도록 저장됩니다.</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }, [isError, refetch, navigation]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* 헤더 */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>찜 목록</Text>
-        <Text style={styles.headerCount}>{items.length}개</Text>
+        <View style={styles.headerLeft}>
+          <MapPinIcon size={20} color={colors.primary} />
+          <Text style={styles.headerTitle}>찜 목록 ({items.length})</Text>
+        </View>
       </View>
-      {items.length === 0 ? (
-        <EmptyState
-          icon={HeartIcon}
-          title="찜한 상품이 없어요"
-          subtitle={'관심 상품을 찜하면\n최저가를 한눈에 확인할 수 있어요'}
-        />
+
+      {isLoading ? (
+        <SkeletonCard variant="wishlist" />
+      ) : items.length === 0 ? (
+        renderEmptyState()
       ) : (
         <FlatList
           data={items}
@@ -178,6 +223,7 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
           renderItem={renderItem}
           contentContainerStyle={listContentStyle}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -200,9 +246,95 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderBottomWidth: 0.5, borderBottomColor: colors.gray200,
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerTitle: { ...typography.headingXl },
-  headerCount: { ...typography.bodySm },
-  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxl + spacing.lg },
+  // ─── 빈 상태 ───────────────────────────────────────────────────────────
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
+  emptyDecorCircle: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: colors.primaryLight,
+    opacity: 0.4,
+    top: '15%',
+  },
+  emptyIconCard: {
+    width: 120,
+    height: 120,
+    borderRadius: spacing.radiusXl,
+    backgroundColor: colors.secondaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: spacing.xs },
+    shadowOpacity: 0.06,
+    shadowRadius: spacing.sm,
+    elevation: spacing.xs,
+  },
+  emptyTitle: {
+    ...typography.headingXl,
+    color: colors.gray900,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    ...typography.bodySm,
+    color: colors.gray600,
+    textAlign: 'center',
+    lineHeight: spacing.xl,
+    marginBottom: spacing.xl,
+  },
+  emptyButton: {
+    backgroundColor: colors.primary,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  emptyButtonText: {
+    ...typography.bodySm,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.secondaryBg,
+    borderRadius: spacing.radiusMd,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    padding: spacing.md,
+    gap: spacing.sm,
+    width: '100%',
+  },
+  tipIconWrap: {
+    width: spacing.rankBadgeSize,
+    height: spacing.rankBadgeSize,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tipEmoji: { fontSize: spacing.iconSm },
+  tipTextWrap: { flex: 1 },
+  tipLabel: {
+    ...typography.bodySm,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    marginBottom: spacing.micro,
+  },
+  tipBody: {
+    ...typography.bodySm,
+    color: colors.gray700,
+    lineHeight: spacing.lg,
+  },
+  // ──────────────────────────────────────────────────────────────────────
   card: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.white, borderRadius: spacing.radiusMd,

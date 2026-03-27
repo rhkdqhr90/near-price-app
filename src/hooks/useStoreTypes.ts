@@ -45,7 +45,7 @@ export const useStoreTypes = () => {
           setStoreTypes(DEFAULT_STORE_TYPES);
         }
       } catch (error) {
-        console.error('Failed to load store types:', error);
+        if (__DEV__) { console.error('Failed to load store types:', error); }
         setStoreTypes(DEFAULT_STORE_TYPES);
       } finally {
         setIsLoading(false);
@@ -84,7 +84,7 @@ export const useStoreTypes = () => {
       setStoreTypes(prev => [...prev, newType]);
       return true;
     } catch (error) {
-      console.error('Failed to add store type:', error);
+      if (__DEV__) { console.error('Failed to add store type:', error); }
       return false;
     }
   }, [storeTypes]);
@@ -109,7 +109,7 @@ export const useStoreTypes = () => {
       setStoreTypes(prev => prev.filter(st => st.value !== value));
       return true;
     } catch (error) {
-      console.error('Failed to remove store type:', error);
+      if (__DEV__) { console.error('Failed to remove store type:', error); }
       return false;
     }
   }, []);

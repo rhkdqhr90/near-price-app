@@ -2,54 +2,123 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
+  Pressable,
   FlatList,
   StyleSheet,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
   Platform,
+  RefreshControl,
   type ListRenderItemInfo,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { HomeScreenProps } from '../../navigation/types';
-import type { SearchProductResult, NearbyStoreResponse } from '../../types/api.types';
-import { useSearchProductsES } from '../../hooks/queries/useProducts';
+import type { PriceResponse, NearbyStoreResponse } from '../../types/api.types';
+import { useProductPricesByName } from '../../hooks/queries/usePrices';
 import { useNearbyStores } from '../../hooks/queries/useNearbyStores';
+import { useAddWishlist } from '../../hooks/queries/useWishlist';
 import { useLocationStore } from '../../store/locationStore';
 import EmptyState from '../../components/common/EmptyState';
-import HighlightText from '../../components/common/HighlightText';
 import LoadingView from '../../components/common/LoadingView';
 import SearchIcon from '../../components/icons/SearchIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import TagIcon from '../../components/icons/TagIcon';
 import StoreIcon from '../../components/icons/StoreIcon';
 import CloseIcon from '../../components/icons/CloseIcon';
+import HeartIcon from '../../components/icons/HeartIcon';
+import { storage, STORAGE_KEYS } from '../../utils/storage';
+import { formatPrice, fixImageUrl } from '../../utils/format';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 } as const;
+const MAX_RECENT_SEARCHES = 10;
+const GRID_GAP = spacing.sm;
+const GRID_PADDING = spacing.lg;
 
 type Props = HomeScreenProps<'Search'>;
 
 type TabType = 'product' | 'store';
+
+interface SearchPriceCard {
+  productId: string;
+  productName: string;
+  unitType: string;
+  storeName: string;
+  minPrice: number;
+  maxPrice: number;
+  storeCount: number;
+  hasClosingDiscount: boolean;
+  imageUrl: string | null;
+  quantity: number | null;
+}
+
+const groupSearchPricesByProduct = (prices: PriceResponse[]): SearchPriceCard[] => {
+  const map = new Map<string, PriceResponse[]>();
+  prices.forEach((p) => {
+    if (!p.product?.name) return;
+    const key = p.product.name.trim().toLowerCase();
+    const group = map.get(key) ?? [];
+    group.push(p);
+    map.set(key, group);
+  });
+
+  return Array.from(map.values())
+    .filter((group) => group[0]?.product?.id)
+    .map((group) => {
+    const sorted = [...group].sort((a, b) => a.price - b.price);
+    const cheapest = sorted[0];
+    const priceList = sorted.map((p) => p.price);
+    return {
+      productId: cheapest.product.id,
+      productName: cheapest.product.name,
+      unitType: cheapest.product?.unitType ?? 'other',
+      storeName: cheapest.store?.name ?? '매장 정보 없음',
+      minPrice: Math.min(...priceList),
+      maxPrice: Math.max(...priceList),
+      storeCount: group.length,
+      hasClosingDiscount: group.some(
+        (p) => p.condition != null && p.condition.includes('마감'),
+      ),
+      imageUrl: cheapest.imageUrl || null,
+      quantity: cheapest.quantity,
+    };
+  });
+};
 
 const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
   const { latitude, longitude } = useLocationStore();
   const [activeTab, setActiveTab] = useState<TabType>('product');
   const [searchQuery, setSearchQuery] = useState(route.params?.initialQuery ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const { mutate: addWishlist } = useAddWishlist();
 
   useEffect(() => {
     inputRef.current?.focus();
+    void storage.get<string[]>(STORAGE_KEYS.RECENT_SEARCHES).then(saved => {
+      if (saved) setRecentSearches(saved);
+    });
     return () => {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     };
+    // 마운트 시 1회 실행: 검색어 히스토리 로드 + 키보드 포커스
   }, []);
+
+  const saveRecentSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const updated = [trimmed, ...recentSearches.filter(q => q !== trimmed)].slice(0, MAX_RECENT_SEARCHES);
+    setRecentSearches(updated);
+    await storage.set(STORAGE_KEYS.RECENT_SEARCHES, updated);
+  }, [recentSearches]);
 
   const handleSearchChange = useCallback((text: string) => {
     setSearchQuery(text);
@@ -57,20 +126,50 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
     searchDebounceRef.current = setTimeout(() => setDebouncedQuery(text), 300);
   }, []);
 
+  const handleSearchSubmit = useCallback(() => {
+    if (searchQuery.trim()) {
+      void saveRecentSearch(searchQuery);
+    }
+  }, [searchQuery, saveRecentSearch]);
+
   const handleClear = useCallback(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     setSearchQuery('');
     setDebouncedQuery('');
   }, []);
 
-  const { data: productResults, isLoading: isProductLoading, isError: isProductError, refetch: refetchProducts } =
-    useSearchProductsES(activeTab === 'product' ? debouncedQuery : '');
+  const handleRecentSearchPress = useCallback((query: string) => {
+    setSearchQuery(query);
+    setDebouncedQuery(query);
+    void saveRecentSearch(query);
+  }, [saveRecentSearch]);
 
-  const { data: storeResults, isLoading: isStoreLoading, isError: isStoreError, refetch: refetchStores } =
+  const handleDeleteRecentSearch = useCallback(async (query: string) => {
+    const updated = recentSearches.filter(q => q !== query);
+    setRecentSearches(updated);
+    await storage.set(STORAGE_KEYS.RECENT_SEARCHES, updated);
+  }, [recentSearches]);
+
+  const handleClearAllRecentSearches = useCallback(async () => {
+    setRecentSearches([]);
+    await storage.remove(STORAGE_KEYS.RECENT_SEARCHES);
+  }, []);
+
+  const { data: priceResults, isLoading: isProductLoading, isError: isProductError,
+    isRefetching: isProductRefetching, refetch: refetchProducts } =
+    useProductPricesByName(activeTab === 'product' ? debouncedQuery : '');
+
+  const { data: storeResults, isLoading: isStoreLoading, isError: isStoreError,
+    isRefetching: isStoreRefetching, refetch: refetchStores } =
     useNearbyStores(
       activeTab === 'store' ? latitude : null,
       activeTab === 'store' ? longitude : null,
     );
+
+  const productCards = useMemo(
+    () => groupSearchPricesByProduct(priceResults ?? []),
+    [priceResults],
+  );
 
   const filteredStoreResults = useMemo(() => {
     if (!storeResults) return undefined;
@@ -79,45 +178,79 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
     return storeResults.filter(s => s.name.toLowerCase().includes(q));
   }, [storeResults, debouncedQuery]);
 
-  const handleProductPress = useCallback(
-    (item: SearchProductResult) => {
-      navigation.navigate('PriceCompare', {
-        productId: item.id,
-        productName: item.name,
-      });
-    },
-    [navigation],
-  );
-
   const handleStorePress = useCallback(
     (store: NearbyStoreResponse) => {
+      void saveRecentSearch(store.name);
       navigation.navigate('StoreDetail', { storeId: store.id });
     },
-    [navigation],
+    [navigation, saveRecentSearch],
   );
 
-  const renderProductItem = useCallback(
-    ({ item }: ListRenderItemInfo<SearchProductResult>) => {
-      const highlightText = item.highlight[0] ?? item.name;
+  const renderProductCard = useCallback(
+    ({ item }: ListRenderItemInfo<SearchPriceCard>) => {
+      const imageUri = fixImageUrl(item.imageUrl);
       return (
-        <TouchableOpacity
-          style={styles.resultItem}
-          onPress={() => handleProductPress(item)}
-          activeOpacity={0.7}
+        <Pressable
+          style={({ pressed }) => [styles.gridCard, pressed && styles.gridCardPressed]}
+          onPress={() => {
+            void saveRecentSearch(item.productName);
+            navigation.navigate('PriceCompare', {
+              productId: item.productId,
+              productName: item.productName,
+            });
+          }}
           accessibilityRole="button"
-          accessibilityLabel={`상품 ${item.name}, 탭하여 가격 비교`}
+          accessibilityLabel={`${item.productName} ${formatPrice(item.minPrice)}`}
         >
-          <View style={styles.productIconBox}>
-            <TagIcon size={16} color={colors.primary} />
+          <View style={styles.gridImageWrap}>
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.gridImage}
+                resizeMode="cover"
+                accessible={true}
+                accessibilityLabel={`${item.productName} 상품 이미지`}
+              />
+            ) : (
+              <View style={styles.gridImagePlaceholder}>
+                <TagIcon size={26} color={colors.gray400} />
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.heartBtn}
+              onPress={() => addWishlist(item.productId)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.productName} 찜하기`}
+            >
+              <HeartIcon size={14} color={colors.white} />
+            </TouchableOpacity>
+            {item.storeCount > 1 && (
+              <View style={styles.storeCountBadge}>
+                <Text style={styles.storeCountBadgeText}>매장 {item.storeCount}곳</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.resultBody}>
-            <HighlightText text={highlightText} baseStyle={styles.resultName} />
-            <Text style={styles.resultHint}>탭하여 가격 비교 →</Text>
+          <View style={styles.gridInfo}>
+            {item.hasClosingDiscount && (
+              <View style={styles.closingBadge}>
+                <Text style={styles.closingBadgeText}>마감</Text>
+              </View>
+            )}
+            <Text style={styles.gridProductName} numberOfLines={2}>{item.productName}</Text>
+            <Text style={styles.gridPrice}>{formatPrice(item.minPrice)}</Text>
+            {item.minPrice !== item.maxPrice && (
+              <Text style={styles.gridPriceRange}>~{formatPrice(item.maxPrice)}</Text>
+            )}
+            <View style={styles.gridStoreRow}>
+              <StoreIcon size={11} color={colors.gray400} />
+              <Text style={styles.gridStoreName} numberOfLines={1}>{item.storeName}</Text>
+            </View>
           </View>
-        </TouchableOpacity>
+        </Pressable>
       );
     },
-    [handleProductPress],
+    [navigation, saveRecentSearch, addWishlist],
   );
 
   const renderStoreItem = useCallback(
@@ -147,10 +280,11 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
   const isError = activeTab === 'product' ? isProductError : isStoreError;
   const onRetry = activeTab === 'product' ? refetchProducts : refetchStores;
   const isEmpty = activeTab === 'product'
-    ? (!productResults || productResults.length === 0)
+    ? productCards.length === 0
     : (!filteredStoreResults || filteredStoreResults.length === 0);
   const showEmpty = !isLoading && !isError && debouncedQuery.trim().length > 0 && isEmpty;
   const showIdle = activeTab === 'product' && debouncedQuery.trim().length === 0;
+  const showRecentSearches = showIdle && recentSearches.length > 0;
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
@@ -169,6 +303,7 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={handleSearchChange}
+            onSubmitEditing={handleSearchSubmit}
             placeholder={activeTab === 'product' ? '상품 이름 검색' : '매장명 검색 (예: 이마트)'}
             placeholderTextColor={colors.gray400}
             returnKeyType="search"
@@ -214,6 +349,41 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           title="위치가 설정되지 않았어요"
           subtitle="홈 화면에서 동네를 설정한 후 매장을 검색해 주세요."
         />
+      ) : showRecentSearches ? (
+        <View style={styles.recentContainer}>
+          <View style={styles.recentHeader}>
+            <Text style={styles.recentTitle}>최근 검색어</Text>
+            <TouchableOpacity
+              onPress={handleClearAllRecentSearches}
+              hitSlop={HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="최근 검색어 전체 삭제"
+            >
+              <Text style={styles.clearAllText}>전체 삭제</Text>
+            </TouchableOpacity>
+          </View>
+          {recentSearches.map((query) => (
+            <TouchableOpacity
+              key={query}
+              style={styles.recentItem}
+              onPress={() => handleRecentSearchPress(query)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`최근 검색어 ${query}`}
+            >
+              <SearchIcon size={14} color={colors.gray400} />
+              <Text style={styles.recentItemText}>{query}</Text>
+              <TouchableOpacity
+                onPress={() => handleDeleteRecentSearch(query)}
+                hitSlop={HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel={`${query} 삭제`}
+              >
+                <CloseIcon size={14} color={colors.gray400} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </View>
       ) : showIdle ? (
         <EmptyState
           icon={SearchIcon}
@@ -232,19 +402,31 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
       ) : showEmpty ? (
         <EmptyState
           icon={TagIcon}
-          title="검색 결과가 없어요"
-          subtitle="다른 키워드로 검색해 보세요"
+          title="🔍 검색 결과가 없어요"
+          subtitle="다른 이름으로 검색해 보세요"
         />
       ) : activeTab === 'product' ? (
         <FlatList
-          data={productResults ?? []}
-          keyExtractor={(item) => item.id}
-          renderItem={renderProductItem}
+          data={productCards}
+          numColumns={2}
+          keyExtractor={(item) => item.productId}
+          renderItem={renderProductCard}
+          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={styles.gridContent}
           keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={isProductRefetching}
+              onRefresh={refetchProducts}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
           ListHeaderComponent={
-            productResults && productResults.length > 0 ? (
+            productCards.length > 0 ? (
               <View style={styles.resultHeader}>
-                <Text style={styles.resultHeaderText}>검색 결과 {productResults.length}건</Text>
+                <Text style={styles.resultHeaderText}>검색 결과 {productCards.length}건</Text>
               </View>
             ) : null
           }
@@ -255,6 +437,14 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           keyExtractor={(item) => item.id}
           renderItem={renderStoreItem}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={isStoreRefetching}
+              onRefresh={refetchStores}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         />
       )}
       </View>
@@ -299,11 +489,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     padding: 0,
   },
-  clearText: {
-    ...typography.body,
-    color: colors.gray400,
-    paddingHorizontal: spacing.xs,
-  },
   cancelBtn: {
     paddingVertical: spacing.sm,
   },
@@ -338,6 +523,8 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: '600' as const,
   },
+
+  // ── 매장 탭 텍스트 리스트 ──
   resultItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -369,19 +556,6 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray400,
   },
-  productIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: spacing.sm,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resultHint: {
-    ...typography.caption,
-    color: colors.primary,
-    marginTop: spacing.micro,
-  },
   resultHeader: {
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
@@ -393,6 +567,155 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.gray600,
     fontWeight: '600' as const,
+  },
+
+  // ── 최근 검색어 ──
+  recentContainer: {
+    flex: 1,
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.gray100,
+  },
+  recentTitle: {
+    ...typography.headingMd,
+    color: colors.black,
+  },
+  clearAllText: {
+    ...typography.bodySm,
+    color: colors.gray400,
+  },
+  recentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.gray100,
+  },
+  recentItemText: {
+    flex: 1,
+    ...typography.body,
+    color: colors.gray700,
+  },
+
+  // ── 상품 탭 2열 그리드 ──
+  gridContent: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxl,
+  },
+  gridRow: {
+    gap: GRID_GAP,
+    paddingHorizontal: GRID_PADDING,
+    marginBottom: spacing.md,
+  },
+  gridCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusLg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  gridCardPressed: {
+    opacity: 0.97,
+    transform: [{ scale: 0.99 }],
+  },
+  gridImageWrap: {
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: colors.secondaryBg,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridImagePlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartBtn: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.heartBtnBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeCountBadge: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: colors.distanceBadgeBg,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  storeCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
+  gridInfo: {
+    padding: spacing.md,
+  },
+  closingBadge: {
+    backgroundColor: colors.dangerLight,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.micro,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.xs,
+  },
+  closingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: colors.danger,
+  },
+  gridProductName: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: colors.black,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
+  },
+  gridPrice: {
+    fontSize: 16,
+    fontWeight: '900' as const,
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  gridPriceRange: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: colors.gray400,
+    marginBottom: spacing.xs,
+  },
+  gridStoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  gridStoreName: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: colors.gray600,
+    flex: 1,
   },
 });
 

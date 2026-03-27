@@ -9,7 +9,6 @@ import {
   ScrollView,
   Platform,
   StyleSheet,
-  Alert,
   PermissionsAndroid,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,7 +54,6 @@ const LocationSetupScreen: React.FC = () => {
   const {
     data: reverseGeocodedName,
     isError: isReverseError,
-    isPending: isReversePending,
     isFetching: isReverseFetching,
     invalidateAndRefetch,
   } = useReverseGeocode(gpsLatLng?.lng ?? null, gpsLatLng?.lat ?? null);

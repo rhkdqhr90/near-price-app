@@ -50,30 +50,33 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl * 2,
   },
   iconWrapper: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   title: {
-    ...typography.headingMd,
-    color: colors.gray600,
+    ...typography.headingLg,
+    color: colors.gray700,
     textAlign: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    fontSize: 18,
   },
   subtitle: {
-    ...typography.bodySm,
+    ...typography.body,
     textAlign: 'center',
-    lineHeight: spacing.xl,
-    marginBottom: spacing.lg,
+    lineHeight: 24,
+    marginBottom: spacing.xl,
+    color: colors.gray600,
   },
   button: {
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     backgroundColor: colors.primary,
     borderRadius: spacing.radiusMd,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg + spacing.lg,
+    paddingVertical: spacing.md + spacing.sm,
+    paddingHorizontal: spacing.xl + spacing.lg,
   },
   buttonText: {
     ...typography.headingMd,
     color: colors.white,
+    fontWeight: '600' as const,
   },
 });
 

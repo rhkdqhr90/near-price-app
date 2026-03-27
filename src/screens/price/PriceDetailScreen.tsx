@@ -9,73 +9,89 @@ import {
   SafeAreaView,
   ActivityIndicator,
   TextInput,
+  Share,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
 import type { HomeScreenProps } from '../../navigation/types';
-import type { PriceResponse } from '../../types/api.types';
-import { priceApi } from '../../api/price.api';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { formatPrice, formatRelativeTime } from '../../utils/format';
-import { API_BASE_URL } from '../../utils/config';
+import { formatPrice, formatRelativeTime, fixImageUrl } from '../../utils/format';
 import EmptyState from '../../components/common/EmptyState';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import { useVerifications, useVerifyPrice } from '../../hooks/queries/useVerification';
+import { usePriceDetail } from '../../hooks/queries/usePrices';
+import { usePriceTrustScore } from '../../hooks/queries/usePriceTrustScore';
+import { useToastStore } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
 
 type Props = HomeScreenProps<'PriceDetail'>;
 
 const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { priceId } = route.params;
-  const [showDisputeInput, setShowDisputeInput] = useState(false);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputePrice, setDisputePrice] = useState('');
+  const showToast = useToastStore((s) => s.showToast);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const {
     data: price,
     isLoading,
     isError,
     refetch,
-  } = useQuery<PriceResponse>({
-    queryKey: ['price', priceId],
-    queryFn: () => priceApi.getOne(priceId).then(res => res.data),
-    enabled: priceId.length > 0,
-  });
+  } = usePriceDetail(priceId);
 
   const { data: verifications } = useVerifications(priceId);
+  const { data: trustScore } = usePriceTrustScore(priceId);
   const { mutate: verifyPrice, isPending: isVerifying } = useVerifyPrice(priceId);
 
-  const fixImageUrl = useCallback((url: string | null | undefined): string | null => {
-    if (!url || url.length === 0) return null;
-    if (url.startsWith('http')) {
-      return url.replace(/http:\/\/10\.0\.2\.2:\d+/, API_BASE_URL);
-    }
-    return `${API_BASE_URL}/${url}`;
-  }, []);
-
   const handleStorePress = useCallback(() => {
-    if (price?.store?.id) {
+    if (price?.store.id) {
       navigation.navigate('StoreDetail', { storeId: price.store.id });
     }
   }, [navigation, price]);
+
+  const hasVerified = verifications?.data?.some(
+    (v) => v.verifier?.id === currentUserId,
+  ) ?? false;
 
   const handleConfirmPrice = useCallback(() => {
     verifyPrice({ result: 'confirmed' });
   }, [verifyPrice]);
 
-  const handleDisputePrice = useCallback(() => {
-    if (showDisputeInput) {
-      if (disputePrice.trim()) {
-        const actualPrice = parseInt(disputePrice, 10);
-        if (!isNaN(actualPrice) && actualPrice > 0) {
-          verifyPrice({ result: 'disputed', actualPrice });
-          setShowDisputeInput(false);
-          setDisputePrice('');
-        }
-      }
-    } else {
-      setShowDisputeInput(true);
+  const handleDisputeSubmit = useCallback(() => {
+    const actualPrice = parseInt(disputePrice, 10);
+    if (isNaN(actualPrice) || actualPrice <= 0) {
+      showToast('올바른 가격을 입력해 주세요', 'error');
+      return;
     }
-  }, [showDisputeInput, disputePrice, verifyPrice]);
+    verifyPrice(
+        { result: 'disputed', actualPrice },
+        {
+          onSuccess: () => {
+            setShowDisputeModal(false);
+            setDisputePrice('');
+          },
+          onError: () => {
+            showToast('이의 제기에 실패했어요', 'error');
+          },
+        },
+      );
+  }, [disputePrice, verifyPrice, showToast]);
+
+  const handleShare = useCallback(async () => {
+    if (!price) return;
+    try {
+      const message = `[마실] ${price.product?.name ?? '상품'} ${formatPrice(price.price)} - ${price.store.name}\n${price.store.address}\n내 동네 최저가를 찾아보세요!`;
+      await Share.share({
+        message,
+      });
+    } catch {
+      showToast('공유할 수 없어요', 'error');
+    }
+  }, [price, showToast]);
 
   if (isLoading) {
     return (
@@ -181,18 +197,44 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
 
         {/* 매장 정보 */}
-        {price.store && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>매장</Text>
-            <Text style={styles.storeName}>{price.store.name}</Text>
-            <Text style={styles.storeAddress}>{price.store.address}</Text>
-          </View>
-        )}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>매장</Text>
+          <Text style={styles.storeName}>{price.store.name}</Text>
+          <Text style={styles.storeAddress}>{price.store.address}</Text>
+        </View>
 
         {/* 가격 신뢰도 */}
-        {(price.verificationCount > 0 || price.trustScore !== null) && (
+        {(price.verificationCount > 0 || price.trustScore !== null || trustScore) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>가격 신뢰도</Text>
+            {trustScore && (
+              <View style={styles.trustStatusRow}>
+                <View style={[
+                  styles.trustStatusBadge,
+                  trustScore.status === 'scored' && styles.trustStatusScored,
+                  trustScore.status === 'verifying' && styles.trustStatusVerifying,
+                  trustScore.status === 'new' && styles.trustStatusNew,
+                ]}>
+                  <Text style={[
+                    styles.trustStatusText,
+                    trustScore.status === 'scored' && styles.trustStatusTextScored,
+                    trustScore.status === 'verifying' && styles.trustStatusTextVerifying,
+                    trustScore.status === 'new' && styles.trustStatusTextNew,
+                  ]}>
+                    {trustScore.status === 'scored' && (
+                      trustScore.trustScore !== null
+                        ? `신뢰도 ${Math.round(trustScore.trustScore)}%`
+                        : '신뢰도 계산 중'
+                    )}
+                    {trustScore.status === 'verifying' && '검증 중'}
+                    {trustScore.status === 'new' && '신규 등록'}
+                  </Text>
+                </View>
+                {trustScore.isStale && (
+                  <Text style={styles.staleText}>오래된 정보일 수 있어요</Text>
+                )}
+              </View>
+            )}
             <View style={styles.trustRow}>
               <View style={styles.trustBadge}>
                 <Text style={styles.trustBadgeText}>
@@ -217,60 +259,31 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.loadingButtonText}>검증 중...</Text>
             </View>
+          ) : hasVerified ? (
+            <View style={styles.verifiedStateContainer}>
+              <Text style={styles.verifiedStateText}>검증에 참여했어요 ✓</Text>
+            </View>
           ) : (
-            <>
-              <View style={styles.verificationButtonRow}>
-                <TouchableOpacity
-                  style={[styles.verificationButton, styles.confirmButton]}
-                  onPress={handleConfirmPrice}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="가격이 맞아요"
-                >
-                  <Text style={styles.verificationButtonText}>맞아요 ✓</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.verificationButton, styles.disputeButton]}
-                  onPress={handleDisputePrice}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="가격이 달라요"
-                >
-                  <Text style={styles.verificationButtonTextDispute}>달라요 ✗</Text>
-                </TouchableOpacity>
-              </View>
-
-              {showDisputeInput && (
-                <View style={styles.disputeInputContainer}>
-                  <Text style={styles.disputeInputLabel}>실제 가격</Text>
-                  <TextInput
-                    style={styles.disputeInput}
-                    placeholder="실제 가격을 입력하세요"
-                    placeholderTextColor={colors.gray400}
-                    keyboardType="number-pad"
-                    value={disputePrice}
-                    onChangeText={setDisputePrice}
-                  />
-                  <TouchableOpacity
-                    style={styles.submitDisputeButton}
-                    onPress={handleDisputePrice}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel="이의 제기 제출"
-                  >
-                    <Text style={styles.submitDisputeButtonText}>제출</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setShowDisputeInput(false);
-                      setDisputePrice('');
-                    }}
-                  >
-                    <Text style={styles.cancelDisputeText}>취소</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </>
+            <View style={styles.verificationButtonRow}>
+              <TouchableOpacity
+                style={[styles.verificationButton, styles.confirmButton]}
+                onPress={handleConfirmPrice}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="가격이 맞아요"
+              >
+                <Text style={styles.verificationButtonText}>맞아요 ✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.verificationButton, styles.disputeButton]}
+                onPress={() => setShowDisputeModal(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="가격이 달라요"
+              >
+                <Text style={styles.verificationButtonTextDispute}>달라요 ✗</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {/* 검증자 목록 */}
@@ -281,12 +294,12 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 <View key={verification.id} style={[styles.verifierItem, index === verifications.data.length - 1 && styles.verifierItemLast]}>
                   <View style={styles.verifierAvatarCircle}>
                     <Text style={styles.verifierAvatarText}>
-                      {verification.verifier.nickname[0]}
+                      {(verification.verifier?.nickname || '?')[0]}
                     </Text>
                   </View>
                   <View style={styles.verifierInfo}>
-                    <Text style={styles.verifierName}>{verification.verifier.nickname}</Text>
-                    <Text style={styles.verifierTrust}>신뢰도 {verification.verifier.trustScore}점</Text>
+                    <Text style={styles.verifierName}>{verification.verifier?.nickname}</Text>
+                    <Text style={styles.verifierTrust}>신뢰도 {verification.verifier?.trustScore}점</Text>
                   </View>
                   <View style={[
                     styles.verificationBadge,
@@ -341,6 +354,87 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </Text>
         </View>
 
+        {/* 달라요 모달 */}
+        <Modal
+          visible={showDisputeModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            setShowDisputeModal(false);
+            setDisputePrice('');
+          }}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={() => {
+                setShowDisputeModal(false);
+                setDisputePrice('');
+              }}
+            />
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>실제 가격 입력</Text>
+              <Text style={styles.modalSubtitle}>
+                현재 표시된 가격이 다르다면 실제 확인한 가격을 입력해 주세요.
+              </Text>
+              <TextInput
+                style={styles.disputeInput}
+                placeholder="실제 가격 (원)"
+                placeholderTextColor={colors.gray400}
+                keyboardType="number-pad"
+                value={disputePrice}
+                onChangeText={setDisputePrice}
+                autoFocus
+                accessibilityLabel="실제 가격 입력"
+              />
+              <View style={styles.modalButtonRow}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={() => {
+                    setShowDisputeModal(false);
+                    setDisputePrice('');
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="취소"
+                >
+                  <Text style={styles.modalCancelButtonText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.modalSubmitButton,
+                    (!disputePrice.trim() || isNaN(parseInt(disputePrice, 10))) && styles.modalButtonDisabled,
+                  ]}
+                  onPress={handleDisputeSubmit}
+                  disabled={!disputePrice.trim() || isNaN(parseInt(disputePrice, 10))}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="이의 제기 제출"
+                >
+                  <Text style={styles.modalSubmitButtonText}>제출</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* 공유하기 버튼 */}
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={handleShare}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="공유하기"
+        >
+          <Text style={styles.shareButtonText}>공유하기</Text>
+        </TouchableOpacity>
+
         {/* 매장 보기 버튼 */}
         <TouchableOpacity
           style={styles.storeButton}
@@ -369,11 +463,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
+    borderBottomWidth: spacing.borderThin,
     borderBottomColor: colors.gray200,
   },
   backButton: {
-    width: 60,
+    width: spacing.backBtnWidth,
     paddingVertical: spacing.sm,
   },
   backButtonText: {
@@ -416,12 +510,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: spacing.sm,
-    borderBottomWidth: 8,
+    borderBottomWidth: spacing.dividerThick,
     borderBottomColor: colors.gray100,
   },
   priceText: {
     ...typography.price,
-    fontSize: 28,
   },
   priceQuantity: {
     ...typography.body,
@@ -430,7 +523,7 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
+    borderBottomWidth: spacing.borderThin,
     borderBottomColor: colors.gray100,
   },
   sectionTitle: {
@@ -479,6 +572,42 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray600,
   },
+  trustStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  trustStatusBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.radiusFull,
+  },
+  trustStatusScored: {
+    backgroundColor: colors.successLight,
+  },
+  trustStatusVerifying: {
+    backgroundColor: colors.primaryLight,
+  },
+  trustStatusNew: {
+    backgroundColor: colors.gray100,
+  },
+  trustStatusText: {
+    ...typography.captionBold,
+  },
+  trustStatusTextScored: {
+    color: colors.success,
+  },
+  trustStatusTextVerifying: {
+    color: colors.primary,
+  },
+  trustStatusTextNew: {
+    color: colors.gray600,
+  },
+  staleText: {
+    ...typography.caption,
+    color: colors.warning,
+  },
   trustRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -500,9 +629,24 @@ const styles = StyleSheet.create({
   trustBadgeDisputedText: {
     color: colors.danger,
   },
-  storeButton: {
+  shareButton: {
     marginHorizontal: spacing.xl,
     marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    backgroundColor: colors.gray100,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    borderWidth: spacing.borderThin,
+    borderColor: colors.gray200,
+  },
+  shareButtonText: {
+    ...typography.headingMd,
+    color: colors.gray700,
+  },
+  storeButton: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
     marginBottom: spacing.md,
     backgroundColor: colors.primary,
     borderRadius: spacing.radiusMd,
@@ -532,7 +676,7 @@ const styles = StyleSheet.create({
   },
   disputeButton: {
     backgroundColor: colors.dangerLight,
-    borderWidth: 1.5,
+    borderWidth: spacing.borderEmphasis,
     borderColor: colors.danger,
   },
   verificationButtonText: {
@@ -556,50 +700,96 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.primary,
   },
-  disputeInputContainer: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray100,
+  verifiedStateContainer: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    borderRadius: spacing.radiusMd,
   },
-  disputeInputLabel: {
-    ...typography.bodySm,
+  verifiedStateText: {
+    ...typography.body,
     fontWeight: '600' as const,
-    color: colors.gray700,
-    marginBottom: spacing.sm,
+    color: colors.primary,
   },
   disputeInput: {
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: colors.gray200,
     borderRadius: spacing.radiusMd,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     ...typography.body,
     color: colors.black,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
-  submitDisputeButton: {
-    backgroundColor: colors.danger,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.modalOverlay,
+  },
+  modalSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: spacing.radiusXl,
+    borderTopRightRadius: spacing.radiusXl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  modalHandle: {
+    width: spacing.headerIconSize,
+    height: spacing.xs,
+    borderRadius: spacing.micro,
+    backgroundColor: colors.gray200,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    ...typography.headingLg,
+    marginBottom: spacing.sm,
+  },
+  modalSubtitle: {
+    ...typography.bodySm,
+    color: colors.gray600,
+    marginBottom: spacing.xl,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalButton: {
+    flex: 1,
     paddingVertical: spacing.md,
     borderRadius: spacing.radiusMd,
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    justifyContent: 'center',
   },
-  submitDisputeButtonText: {
-    ...typography.headingMd,
-    color: colors.white,
-    fontWeight: '600' as const,
+  modalCancelButton: {
+    backgroundColor: colors.gray100,
+    borderWidth: spacing.borderThin,
+    borderColor: colors.gray200,
   },
-  cancelDisputeText: {
+  modalCancelButtonText: {
     ...typography.body,
-    color: colors.gray600,
-    textAlign: 'center',
-    paddingVertical: spacing.sm,
+    fontWeight: '600' as const,
+    color: colors.gray700,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.danger,
+  },
+  modalSubmitButtonText: {
+    ...typography.body,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
+  modalButtonDisabled: {
+    opacity: 0.4,
   },
   verifiersContainer: {
     marginTop: spacing.lg,
     paddingTop: spacing.lg,
-    borderTopWidth: 1,
+    borderTopWidth: spacing.borderThin,
     borderTopColor: colors.gray100,
   },
   verifiersTitle: {
@@ -613,16 +803,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
+    borderBottomWidth: spacing.borderThin,
     borderBottomColor: colors.gray100,
   },
   verifierItemLast: {
     borderBottomWidth: 0,
   },
   verifierAvatarCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: spacing.backBtnSize,
+    height: spacing.backBtnSize,
+    borderRadius: spacing.backBtnSize / 2,
     backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',

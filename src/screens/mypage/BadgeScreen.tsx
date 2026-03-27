@@ -1,26 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
+import LoadingView from '../../components/common/LoadingView';
+import ErrorView from '../../components/common/ErrorView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MyPageScreenProps } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
-import { badgeApi } from '../../api/badge.api';
-import type { UserBadgesResponse } from '../../types/api.types';
+import { useUserBadges, useUserTrustScore } from '../../hooks/queries/useBadges';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
+import BadgeIcon, { BadgeType } from '../../components/icons/BadgeIcon';
 
 type Props = MyPageScreenProps<'Badge'>;
 
 interface BadgeGridItem {
-  type: string;
+  type: BadgeType | (string & {});
   name: string;
   icon: string;
   category: 'registration' | 'verification' | 'trust';
@@ -42,132 +43,109 @@ const BADGE_DESCRIPTIONS: Record<string, string> = {
   'highest_trust': '최고 신뢰도 사용자',
 };
 
+interface BadgeItemProps {
+  badge: BadgeGridItem;
+}
+
+const BadgeItem = React.memo<BadgeItemProps>(({ badge }) => {
+  const pct = Math.min(
+    ((badge.current ?? 0) / (badge.threshold || 1)) * 100,
+    100,
+  );
+  const progressWidth = { width: `${pct}%` as `${number}%` };
+
+  return (
+    <View
+      style={[styles.badgeItem, !badge.isEarned && styles.badgeItemInactive]}
+      accessible={true}
+      accessibilityLabel={`${badge.name} 뱃지${badge.isEarned ? ' - 획득함' : ` - ${badge.current ?? 0}/${badge.threshold ?? 0}`}`}
+    >
+      <View
+        style={[
+          styles.badgeIconContainer,
+          !badge.isEarned && styles.badgeIconContainerInactive,
+        ]}
+      >
+        <BadgeIcon type={badge.type} size={32} earned={badge.isEarned} />
+      </View>
+      <Text style={styles.badgeName}>{badge.name}</Text>
+      <Text style={styles.badgeDescription}>{badge.description}</Text>
+      {badge.isEarned ? (
+        <Text style={styles.badgeEarnedText}>획득함</Text>
+      ) : (
+        <View style={styles.badgeProgressContainer}>
+          <View style={styles.badgeProgressBar}>
+            <View style={[styles.badgeProgressFill, progressWidth]} />
+          </View>
+          <Text style={styles.badgeProgressText}>
+            {badge.current ?? 0} / {badge.threshold ?? 0}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+});
+
 const BadgeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const user = useAuthStore(s => s.user);
 
-  const [badgesData, setBadgesData] = useState<UserBadgesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: badgesData,
+    isLoading: badgesLoading,
+    isError: badgesError,
+    refetch: refetchBadges,
+  } = useUserBadges(user?.id);
 
-  useEffect(() => {
-    const fetchBadges = async () => {
-      if (!user?.id) {
-        setError('사용자 정보가 없습니다');
-        setLoading(false);
-        return;
-      }
+  const {
+    data: trustScoreData,
+    isLoading: trustScoreLoading,
+    isError: trustScoreError,
+    refetch: refetchTrustScore,
+  } = useUserTrustScore(user?.id);
 
-      try {
-        setLoading(true);
-        const response = await badgeApi.getUserBadges(user.id);
-        setBadgesData(response);
-      } catch (err) {
-        console.error('배지 조회 에러:', err);
-        let message = '배지를 불러올 수 없습니다';
-        if (err && typeof err === 'object' && 'message' in err) {
-          message = (err as Error).message;
-        }
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loading = badgesLoading || trustScoreLoading;
+  const error = badgesError || trustScoreError;
 
-    fetchBadges();
-  }, [user?.id]);
+  const handleRetry = React.useCallback(() => {
+    refetchBadges();
+    refetchTrustScore();
+  }, [refetchBadges, refetchTrustScore]);
 
-  const handleRetry = () => {
-    setError(null);
-    const fetchBadges = async () => {
-      if (!user?.id) return;
-      try {
-        setLoading(true);
-        const response = await badgeApi.getUserBadges(user.id);
-        setBadgesData(response);
-      } catch (err) {
-        console.error('배지 조회 에러:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBadges();
-  };
-
-  const getBadgeGridItems = (): BadgeGridItem[] => {
+  const badgeItems = React.useMemo<BadgeGridItem[]>(() => {
     if (!badgesData) return [];
 
-    const allBadges: BadgeGridItem[] = [];
-
-    // 획득한 뱃지 추가
-    badgesData.earned.forEach(badge => {
-      allBadges.push({
+    const categoryOrder: Record<string, number> = { registration: 0, verification: 1, trust: 2 };
+    const allBadges: BadgeGridItem[] = [
+      ...badgesData.earned.map(badge => ({
         type: badge.type,
         name: badge.name,
         icon: badge.icon,
         category: badge.category,
-        isEarned: true,
+        isEarned: true as const,
         description: BADGE_DESCRIPTIONS[badge.type] || badge.name,
         earnedAt: badge.earnedAt,
-      });
-    });
-
-    // 진행 중인 뱃지 추가
-    badgesData.progress.forEach(badge => {
-      allBadges.push({
+      })),
+      ...badgesData.progress.map(badge => ({
         type: badge.type,
         name: badge.name,
         icon: badge.icon,
         category: badge.category,
-        isEarned: false,
+        isEarned: false as const,
         description: BADGE_DESCRIPTIONS[badge.type] || badge.name,
         current: badge.current,
         threshold: badge.threshold,
-      });
-    });
+      })),
+    ];
 
-    // 카테고리별로 정렬
-    return allBadges.sort((a, b) => {
-      const categoryOrder = { registration: 0, verification: 1, trust: 2 };
-      return categoryOrder[a.category] - categoryOrder[b.category];
-    });
-  };
+    return allBadges.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category]);
+  }, [badgesData]);
 
-  const getActivityStats = () => {
-    if (!badgesData) return { registrations: 0, verifications: 0, trustScore: user?.trustScore ?? 0 };
-
-    let registrations = 0;
-    let verifications = 0;
-
-    // 진행 중 배지에서 최대값 찾기
-    badgesData.progress.forEach(badge => {
-      if (badge.category === 'registration') {
-        registrations = Math.max(registrations, badge.current);
-      } else if (badge.category === 'verification') {
-        verifications = Math.max(verifications, badge.current);
-      }
-    });
-
-    // 획득한 뱃지 기반 추정
-    badgesData.earned.forEach(badge => {
-      if (badge.type === 'price_master') registrations = Math.max(registrations, 50);
-      else if (badge.type === 'active_registerer') registrations = Math.max(registrations, 10);
-      else if (badge.type === 'first_registration') registrations = Math.max(registrations, 1);
-
-      if (badge.type === 'verification_master') verifications = Math.max(verifications, 100);
-      else if (badge.type === 'verification_expert') verifications = Math.max(verifications, 20);
-      else if (badge.type === 'first_verification') verifications = Math.max(verifications, 1);
-    });
-
-    return {
-      registrations,
-      verifications,
-      trustScore: user?.trustScore ?? 0,
-    };
-  };
-
-  const badgeItems = getBadgeGridItems();
-  const stats = getActivityStats();
+  const stats = React.useMemo(() => ({
+    registrations: trustScoreData?.totalRegistrations ?? 0,
+    verifications: trustScoreData?.totalVerifications ?? 0,
+    trustScore: trustScoreData?.trustScore ?? user?.trustScore ?? 0,
+  }), [trustScoreData, user?.trustScore]);
   const earnedCount = badgesData?.earned.length ?? 0;
   const totalCount = (badgesData?.earned.length ?? 0) + (badgesData?.progress.length ?? 0);
 
@@ -175,6 +153,21 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
     () => [styles.container, { paddingTop: insets.top }],
     [insets.top],
   );
+
+  const contentContainerStyle = React.useMemo(
+    () => ({ paddingBottom: spacing.xl + insets.bottom }),
+    [insets.bottom],
+  );
+
+  if (!user) {
+    return <LoadingView message="사용자 정보를 불러오는 중..." />;
+  }
+  if (loading) {
+    return <LoadingView message="뱃지를 불러오는 중..." />;
+  }
+  if (error) {
+    return <ErrorView message="뱃지를 불러오지 못했습니다" onRetry={handleRetry} />;
+  }
 
   return (
     <View style={containerStyle}>
@@ -195,7 +188,7 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: spacing.xl + insets.bottom }}
+        contentContainerStyle={contentContainerStyle}
       >
         {/* 활동 통계 섹션 */}
         <View style={styles.statsSection}>
@@ -223,81 +216,18 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.badgeCountSubtext}>뱃지 획득</Text>
         </View>
 
-        {/* 로딩 상태 */}
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>배지를 불러오는 중...</Text>
-          </View>
-        )}
-
-        {/* 에러 상태 */}
-        {error && !loading && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={handleRetry}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.retryButtonText}>다시 시도</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* 뱃지 그리드 */}
-        {!loading && !error && badgeItems.length === 0 && (
+        {badgeItems.length === 0 && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>아직 뱃지가 없습니다</Text>
             <Text style={styles.emptySubtext}>가격 등록과 검증을 통해 뱃지를 획득해보세요!</Text>
           </View>
         )}
 
-        {!loading && !error && badgeItems.length > 0 && (
+        {badgeItems.length > 0 && (
           <View style={styles.badgeGrid}>
-            {badgeItems.map((badge, index) => (
-              <TouchableOpacity
-                key={`${badge.type}-${index}`}
-                style={[
-                  styles.badgeItem,
-                  !badge.isEarned && styles.badgeItemInactive,
-                ]}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.badgeIconContainer,
-                    !badge.isEarned && styles.badgeIconContainerInactive,
-                  ]}
-                >
-                  <Text style={styles.badgeIcon}>{badge.icon}</Text>
-                </View>
-                <Text style={styles.badgeName}>{badge.name}</Text>
-                <Text style={styles.badgeDescription}>{badge.description}</Text>
-
-                {badge.isEarned ? (
-                  <Text style={styles.badgeEarnedText}>획득함</Text>
-                ) : (
-                  <View style={styles.badgeProgressContainer}>
-                    <View style={styles.badgeProgressBar}>
-                      <View
-                        style={[
-                          styles.badgeProgressFill,
-                          {
-                            width: `${Math.min(
-                              ((badge.current ?? 0) / (badge.threshold ?? 1)) * 100,
-                              100,
-                            )}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.badgeProgressText}>
-                      {badge.current} / {badge.threshold}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+            {badgeItems.map((badge) => (
+              <BadgeItem key={`${badge.type}-${badge.isEarned ? 'earned' : 'progress'}`} badge={badge} />
             ))}
           </View>
         )}
@@ -329,7 +259,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   headerRight: {
-    width: 24,
+    width: spacing.xxl,
   },
 
   // 콘텐츠
@@ -387,53 +317,12 @@ const styles = StyleSheet.create({
     color: colors.gray600,
   },
 
-  // 로딩
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.xxxl,
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.gray600,
-    marginTop: spacing.lg,
-  },
-
-  // 에러
-  errorContainer: {
-    backgroundColor: colors.white,
-    marginHorizontal: spacing.xl,
-    marginVertical: spacing.lg,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    borderRadius: spacing.radiusMd,
-    alignItems: 'center',
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.danger,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: spacing.radiusMd,
-  },
-  retryButtonText: {
-    ...typography.body,
-    fontWeight: '600' as const,
-    color: colors.white,
-  },
-
   // 빈 상태
   emptyContainer: {
     backgroundColor: colors.white,
     marginHorizontal: spacing.xl,
     marginVertical: spacing.lg,
-    paddingVertical: spacing.xxxl,
+    paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.lg,
     borderRadius: spacing.radiusMd,
     alignItems: 'center',
@@ -471,14 +360,14 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   badgeItemInactive: {
-    borderColor: colors.gray300,
+    borderColor: colors.gray200,
     opacity: 0.6,
   },
 
   badgeIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: spacing.fabSize,
+    height: spacing.fabSize,
+    borderRadius: spacing.radiusFull,
     backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -487,13 +376,9 @@ const styles = StyleSheet.create({
   badgeIconContainerInactive: {
     backgroundColor: colors.gray200,
   },
-  badgeIcon: {
-    fontSize: 28,
-  },
-
   badgeName: {
     ...typography.bodySm,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.black,
     marginBottom: spacing.xs,
     textAlign: 'center',
@@ -508,7 +393,7 @@ const styles = StyleSheet.create({
 
   badgeEarnedText: {
     ...typography.bodySm,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.primary,
   },
 
@@ -518,9 +403,9 @@ const styles = StyleSheet.create({
   },
   badgeProgressBar: {
     width: '100%',
-    height: 6,
+    height: spacing.cardTextGap,
     backgroundColor: colors.gray200,
-    borderRadius: 3,
+    borderRadius: spacing.cardTextGap / 2,
     overflow: 'hidden',
   },
   badgeProgressFill: {

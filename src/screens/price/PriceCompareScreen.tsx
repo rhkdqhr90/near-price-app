@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   FlatList,
   TouchableOpacity,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   LayoutAnimation,
   ActivityIndicator,
   Modal,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HomeScreenProps } from '../../navigation/types';
@@ -16,19 +18,30 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useProductPricesByName } from '../../hooks/queries/usePrices';
-import { useMyWishlist, useAddWishlist, useRemoveWishlist } from '../../hooks/queries/useWishlist';
-import { useLocationStore, RADIUS_OPTIONS, type RadiusOption } from '../../store/locationStore';
-import { getDistanceM, formatPrice } from '../../utils/format';
+import {
+  useMyWishlist,
+  useAddWishlist,
+  useRemoveWishlist,
+} from '../../hooks/queries/useWishlist';
+import {
+  useLocationStore,
+  RADIUS_OPTIONS,
+  type RadiusOption,
+} from '../../store/locationStore';
+import { getDistanceM, formatPrice, fixImageUrl } from '../../utils/format';
 import PriceRankCard from '../../components/price/PriceRankCard';
-import PriceMapView from '../../components/price/PriceMapView';
+import PriceMapSection from '../../components/price/PriceMapSection';
 import PriceTrendChart from '../../components/price/PriceTrendChart';
 import EmptyState from '../../components/common/EmptyState';
 import SkeletonCard from '../../components/common/SkeletonCard';
 import HeartIcon from '../../components/icons/HeartIcon';
+import ShareIcon from '../../components/icons/ShareIcon';
 import TagIcon from '../../components/icons/TagIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import ChevronDownIcon from '../../components/icons/ChevronDownIcon';
-import type { PriceResponse } from '../../types/api.types';
+import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
+import MapPinIcon from '../../components/icons/MapPinIcon';
+import type { PriceResponse, ProductCategory } from '../../types/api.types';
 import { useToastStore } from '../../store/toastStore';
 
 const RADIUS_LABELS: Record<RadiusOption, string> = {
@@ -38,6 +51,48 @@ const RADIUS_LABELS: Record<RadiusOption, string> = {
   10000: '10km 이내',
 };
 
+const CATEGORY_LABELS: Record<ProductCategory, string> = {
+  vegetable: '채소',
+  fruit: '과일',
+  meat: '육류',
+  seafood: '해산물',
+  dairy: '유제품',
+  grain: '곡류',
+  processed: '가공식품',
+  household: '생활용품',
+  other: '기타',
+};
+
+const CATEGORY_EMOJI: Record<ProductCategory, string> = {
+  vegetable: '🥬',
+  fruit: '🍎',
+  meat: '🥩',
+  seafood: '🐟',
+  dairy: '🥛',
+  grain: '🌾',
+  processed: '🍱',
+  household: '🧴',
+  other: '📦',
+};
+
+function formatDistanceM(m: number): string {
+  if (m < 1000) return `${Math.round(m)}m`;
+  return `${(m / 1000).toFixed(1)}km`;
+}
+
+const TOP_RANK_COUNT = 3; // renderSummaryHeader에서 별도 렌더링하는 상위 카드 수
+
+function getDistText(
+  store: PriceResponse['store'],
+  lat: number | null,
+  lng: number | null,
+): string | null {
+  if (lat === null || lng === null) return null;
+  if (store.latitude == null || store.longitude == null) return null;
+  const d = getDistanceM(lat, lng, store.latitude, store.longitude);
+  return isNaN(d) ? null : formatDistanceM(d);
+}
+
 type Props = HomeScreenProps<'PriceCompare'>;
 type ViewMode = 'list' | 'map';
 
@@ -46,9 +101,8 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const [showRadiusDropdown, setShowRadiusDropdown] = useState(false);
-  const showToast = useToastStore((s) => s.showToast);
+  const showToast = useToastStore(s => s.showToast);
 
   const { latitude, longitude, radius, setRadius } = useLocationStore();
 
@@ -62,11 +116,15 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
   const filteredPrices = useMemo(() => {
     if (!prices) return [];
     if (latitude === null || longitude === null) return prices;
-    return prices.filter((p) => {
-      if (!p.store) return true;
+    return prices.filter(p => {
       if (p.store.latitude == null || p.store.longitude == null) return true;
       if (isNaN(p.store.latitude) || isNaN(p.store.longitude)) return true;
-      const dist = getDistanceM(latitude, longitude, p.store.latitude, p.store.longitude);
+      const dist = getDistanceM(
+        latitude,
+        longitude,
+        p.store.latitude,
+        p.store.longitude,
+      );
       return !isNaN(dist) && dist <= radius;
     });
   }, [prices, latitude, longitude, radius]);
@@ -77,14 +135,35 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
     const sorted = [...filteredPrices].sort((a, b) => a.price - b.price);
     const min = sorted[0].price;
     const max = sorted[sorted.length - 1].price;
-    const avg = Math.round(filteredPrices.reduce((s, p) => s + p.price, 0) / filteredPrices.length);
-    return { min, max, avg, count: filteredPrices.length, cheapestStore: sorted[0].store?.name ?? '알 수 없음' };
+    const avg = Math.round(
+      filteredPrices.reduce((s, p) => s + p.price, 0) / filteredPrices.length,
+    );
+    return {
+      min,
+      max,
+      avg,
+      count: filteredPrices.length,
+      cheapestStore: sorted[0].store.name,
+      cheapestStoreId: sorted[0].store.id,
+      sortedPrices: sorted,
+      allPrices: filteredPrices,
+      heroImageUrl: fixImageUrl(filteredPrices[0]?.imageUrl) ?? '',
+      category: filteredPrices[0]?.product?.category ?? 'other',
+    };
   }, [filteredPrices]);
 
-  const { data: wishlist } = useMyWishlist();
-  const { mutate: addWishlist } = useAddWishlist();
-  const { mutate: removeWishlist } = useRemoveWishlist();
-  const isWishlisted = wishlist?.items?.some(item => item.productId === productId) ?? false;
+  // FlatList에 표시할 TOP_RANK_COUNT 이후 항목 (안정된 배열 참조 유지)
+  const remainingPrices = useMemo(
+    () => priceStats?.sortedPrices.slice(TOP_RANK_COUNT) ?? [],
+    [priceStats],
+  );
+
+  const { data: wishlist, isLoading: isWishlistQueryLoading } = useMyWishlist();
+  const { mutate: addWishlist, isPending: isAdding } = useAddWishlist();
+  const { mutate: removeWishlist, isPending: isRemoving } = useRemoveWishlist();
+  const isWishlistLoading = isAdding || isRemoving || isWishlistQueryLoading;
+  const isWishlisted =
+    wishlist?.items?.some(item => item.productId === productId) ?? false;
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -94,14 +173,26 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleWishlistToggle = useCallback(() => {
     if (isWishlistLoading) return;
-    setIsWishlistLoading(true);
-    const opts = {
-      onSuccess: () => { showToast(isWishlisted ? '찜 해제' : '찜 완료', 'success'); setIsWishlistLoading(false); },
-      onError: () => { showToast('오류가 발생했어요', 'error'); setIsWishlistLoading(false); },
-    };
-    if (isWishlisted) { removeWishlist(productId, opts); }
-    else { addWishlist(productId, opts); }
-  }, [isWishlisted, isWishlistLoading, addWishlist, removeWishlist, productId, showToast]);
+    if (isWishlisted) {
+      removeWishlist(productId);
+    } else {
+      addWishlist(productId);
+    }
+  }, [isWishlisted, isWishlistLoading, addWishlist, removeWishlist, productId]);
+
+  const handleShare = useCallback(async () => {
+    if (!priceStats) return;
+    try {
+      const message = `[마실] ${productName} 최저가 ${formatPrice(
+        priceStats.min,
+      )} - ${priceStats.cheapestStore}\n내 동네 최저가를 찾아보세요!`;
+      await Share.share({
+        message,
+      });
+    } catch {
+      showToast('공유할 수 없어요', 'error');
+    }
+  }, [productName, priceStats, showToast]);
 
   const handlePriceCardPress = useCallback(
     (price: PriceResponse) => {
@@ -111,92 +202,245 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const handleStorePress = useCallback(
-    (storeId: string) => { navigation.navigate('StoreDetail', { storeId }); },
+    (storeId: string) => {
+      navigation.navigate('StoreDetail', { storeId });
+    },
     [navigation],
   );
 
-  const handleRadiusSelect = useCallback((opt: RadiusOption) => {
-    LayoutAnimation.configureNext(LayoutAnimation.create(150, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
-    setRadius(opt);
-    setShowRadiusDropdown(false);
-  }, [setRadius]);
+  const handleRadiusSelect = useCallback(
+    (opt: RadiusOption) => {
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(
+          150,
+          LayoutAnimation.Types.easeInEaseOut,
+          LayoutAnimation.Properties.opacity,
+        ),
+      );
+      setRadius(opt);
+      setShowRadiusDropdown(false);
+    },
+    [setRadius],
+  );
 
   const renderPriceItem = useCallback(
     ({ item, index }: { item: PriceResponse; index: number }) => (
-      <PriceRankCard rank={index + 1} price={item} onPress={handlePriceCardPress} />
+      <PriceRankCard
+        rank={index + TOP_RANK_COUNT + 1}
+        price={item}
+        onPress={handlePriceCardPress}
+      />
     ),
     [handlePriceCardPress],
   );
 
-  // ─── 가격 요약 카드 ──────────────────────────────────────────────────────
+  // ─── 상품 히어로 + 순위 헤더 ────────────────────────────────────────────
   const renderSummaryHeader = useCallback(() => {
     if (!priceStats) return null;
+    const { sortedPrices, heroImageUrl, category, allPrices } = priceStats;
+    const first = sortedPrices[0] ?? null;
+    const second = sortedPrices[1] ?? null;
+    const third = sortedPrices[2] ?? null;
+
+    const firstDistText = first ? getDistText(first.store, latitude, longitude) : null;
+    const secondDistText = second ? getDistText(second.store, latitude, longitude) : null;
+    const thirdDistText = third ? getDistText(third.store, latitude, longitude) : null;
+
     return (
       <View>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>최저가</Text>
-              <Text style={styles.summaryValuePrimary}>{formatPrice(priceStats.min)}</Text>
-              <Text style={styles.summaryStoreName}>{priceStats.cheapestStore}</Text>
+        {/* 히어로 이미지 + 오버레이 배지 */}
+        <View style={styles.heroWrapper}>
+          {heroImageUrl ? (
+            <Image
+              source={{ uri: heroImageUrl }}
+              style={styles.heroImage}
+              resizeMode="cover"
+              accessibilityLabel={`${productName} 상품 이미지`}
+            />
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <Text style={styles.heroEmoji}>{CATEGORY_EMOJI[category]}</Text>
             </View>
-            {priceStats.count > 1 && (
-              <>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>평균가</Text>
-                  <Text style={styles.summaryValue}>{formatPrice(priceStats.avg)}</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>최고가</Text>
-                  <Text style={styles.summaryValueMuted}>{formatPrice(priceStats.max)}</Text>
-                </View>
-              </>
-            )}
+          )}
+          <View style={styles.heroOverlayBadge}>
+            <Text style={styles.heroOverlayBadgeText}>최저가 갱신</Text>
           </View>
         </View>
-        <PriceTrendChart prices={filteredPrices} />
+
+        {/* 상품 정보 */}
+        <View style={styles.heroInfo}>
+          <Text style={styles.categoryBreadcrumb}>{CATEGORY_LABELS[category]}</Text>
+          <Text style={styles.heroProductName} numberOfLines={2}>{productName}</Text>
+          <View style={styles.heroPriceRow}>
+            <Text style={styles.heroMinPrice}>{formatPrice(priceStats.min)}</Text>
+            <Text style={styles.heroCount}>{priceStats.count}건 등록</Text>
+          </View>
+          <Text style={styles.heroCheapestStore}>{priceStats.cheapestStore} 최저가</Text>
+        </View>
+
+        {/* 마트별 최저가 순위 */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>마트별 최저가 순위</Text>
+          <Text style={styles.sectionSubtitle}>오늘 업데이트</Text>
+        </View>
+
+        {/* 1위 카드 */}
+        {first && (
+          <View style={styles.rankFirstCard}>
+            <View style={styles.rankFirstBadge}>
+              <Text style={styles.rankFirstBadgeText}>실시간 최저가 1위</Text>
+            </View>
+            <View style={styles.rankFirstBody}>
+              <View style={styles.rankFirstStoreThumb}>
+                <Text style={styles.rankFirstStoreThumbText}>
+                  {first.store.name.charAt(0)}
+                </Text>
+              </View>
+              <View style={styles.rankFirstStoreInfo}>
+                <Text style={styles.rankFirstStoreName} numberOfLines={1}>
+                  {first.store.name}
+                </Text>
+                {firstDistText !== null && (
+                  <Text style={styles.rankFirstDistance}>{firstDistText}</Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.rankFirstPriceBox}>
+              <Text style={styles.rankFirstPrice}>{formatPrice(first.price)}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.rankFirstRouteBtn}
+              onPress={() => handleStorePress(first.store.id)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${first.store.name} 매장 상세 보기`}
+            >
+              <MapPinIcon size={spacing.iconSm} color={colors.white} />
+              <Text style={styles.rankFirstRouteBtnText}>매장으로 길찾기</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 2, 3위 그리드 */}
+        {(second !== null || third !== null) && (
+          <View style={styles.rankGrid}>
+            {second && (
+              <TouchableOpacity
+                style={styles.rankGridCard}
+                onPress={() => handlePriceCardPress(second)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`2위 ${second.store.name} ${formatPrice(second.price)}`}
+              >
+                <View style={styles.rankGridTop}>
+                  <View style={styles.rankGridBadge}>
+                    <Text style={styles.rankGridBadgeText}>2위</Text>
+                  </View>
+                  {secondDistText !== null && (
+                    <Text style={styles.rankGridDistance}>{secondDistText}</Text>
+                  )}
+                </View>
+                <Text style={styles.rankGridStoreName} numberOfLines={1}>
+                  {second.store.name}
+                </Text>
+                <Text style={styles.rankGridPrice}>{formatPrice(second.price)}</Text>
+              </TouchableOpacity>
+            )}
+            {third && (
+              <TouchableOpacity
+                style={styles.rankGridCard}
+                onPress={() => handlePriceCardPress(third)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`3위 ${third.store.name} ${formatPrice(third.price)}`}
+              >
+                <View style={styles.rankGridTop}>
+                  <View style={styles.rankGridBadge}>
+                    <Text style={styles.rankGridBadgeText}>3위</Text>
+                  </View>
+                  {thirdDistText !== null && (
+                    <Text style={styles.rankGridDistance}>{thirdDistText}</Text>
+                  )}
+                </View>
+                <Text style={styles.rankGridStoreName} numberOfLines={1}>
+                  {third.store.name}
+                </Text>
+                <Text style={styles.rankGridPrice}>{formatPrice(third.price)}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* 가격 변동 추이 */}
+        <PriceTrendChart prices={allPrices} />
       </View>
     );
-  }, [priceStats, filteredPrices]);
+  }, [priceStats, productName, handleStorePress, handlePriceCardPress, latitude, longitude]);
 
   const renderContent = useCallback(() => {
     if (isPricesLoading) return <SkeletonCard variant="rank" />;
     if (isPricesError) {
       return (
-        <EmptyState icon={WifiOffIcon} title="불러올 수 없어요"
+        <EmptyState
+          icon={WifiOffIcon}
+          title="불러올 수 없어요"
           subtitle="네트워크 상태를 확인하고 다시 시도해 주세요."
-          action={{ label: '다시 시도', onPress: refetchPrices }} />
+          action={{ label: '다시 시도', onPress: refetchPrices }}
+        />
       );
     }
-    if (filteredPrices.length === 0) {
+    if (!priceStats) {
       return (
-        <EmptyState icon={TagIcon} title="등록된 가격이 없어요"
-          subtitle={prices && prices.length > 0
-            ? `${RADIUS_LABELS[radius]} 내에 등록된 가격 정보가 없습니다`
-            : '아직 이 상품의 가격을 등록한 사람이 없어요'} />
+        <EmptyState
+          icon={TagIcon}
+          title="등록된 가격이 없어요"
+          subtitle={
+            prices && prices.length > 0
+              ? `${RADIUS_LABELS[radius]} 내에 등록된 가격 정보가 없습니다. 거리 범위를 넓혀보세요.`
+              : '아직 이 상품의 가격을 등록한 사람이 없어요'
+          }
+        />
       );
     }
 
     if (viewMode === 'list') {
       return (
         <FlatList
-          data={filteredPrices}
+          data={remainingPrices}
           keyExtractor={item => item.id}
           renderItem={renderPriceItem}
           ListHeaderComponent={renderSummaryHeader}
           contentContainerStyle={styles.listContent}
+          removeClippedSubviews
           refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh}
-              tintColor={colors.primary} colors={[colors.primary]} />
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
           }
         />
       );
     }
-    return <PriceMapView prices={filteredPrices} onMarkerPress={handleStorePress} />;
-  }, [isPricesLoading, isPricesError, filteredPrices, prices, viewMode, radius,
-    isRefreshing, handleRefresh, renderPriceItem, refetchPrices, handleStorePress, renderSummaryHeader]);
+    return (
+      <PriceMapSection prices={priceStats.allPrices} onMarkerPress={handleStorePress} />
+    );
+  }, [
+    isPricesLoading,
+    isPricesError,
+    priceStats,
+    prices,
+    viewMode,
+    radius,
+    isRefreshing,
+    handleRefresh,
+    renderPriceItem,
+    refetchPrices,
+    handleStorePress,
+    renderSummaryHeader,
+    remainingPrices,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -204,16 +448,29 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         {/* 뒤로가기 + 상품명 */}
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}
-            accessibilityRole="button" accessibilityLabel="뒤로 가기">
-            <Text style={styles.backBtnText}>←</Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로 가기"
+          >
+            <ChevronLeftIcon color={colors.black} />
           </TouchableOpacity>
           <View style={styles.headerTitleArea}>
-            <Text style={styles.productName} numberOfLines={1}>{productName}</Text>
-            {prices && prices.length > 0 && (
-              <Text style={styles.priceCount}>{filteredPrices.length}건</Text>
-            )}
+            <Text style={styles.headerTitle}>상품 상세</Text>
           </View>
+          {/* 공유 버튼 */}
+          <TouchableOpacity
+            style={styles.shareBtn}
+            onPress={handleShare}
+            disabled={!priceStats}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="공유하기"
+          >
+            <ShareIcon size={spacing.iconSm} color={colors.gray400} />
+          </TouchableOpacity>
+
           {/* 찜 버튼 */}
           <TouchableOpacity
             style={[styles.wishBtn, isWishlisted && styles.wishBtnActive]}
@@ -224,9 +481,16 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
             accessibilityLabel={isWishlisted ? '찜 해제' : '찜하기'}
           >
             {isWishlistLoading ? (
-              <ActivityIndicator size="small" color={isWishlisted ? colors.white : colors.primary} />
+              <ActivityIndicator
+                size="small"
+                color={isWishlisted ? colors.white : colors.primary}
+              />
             ) : (
-              <HeartIcon size={18} color={isWishlisted ? colors.white : colors.gray400} filled={isWishlisted} />
+              <HeartIcon
+                size={spacing.iconSm}
+                color={isWishlisted ? colors.white : colors.gray400}
+                filled={isWishlisted}
+              />
             )}
           </TouchableOpacity>
         </View>
@@ -235,19 +499,33 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.controlBar}>
           {/* 목록/지도 토글 */}
           <View style={styles.viewToggle}>
-            {(['list', 'map'] as ViewMode[]).map((mode) => (
+            {(['list', 'map'] as ViewMode[]).map(mode => (
               <TouchableOpacity
                 key={mode}
-                style={[styles.viewToggleBtn, viewMode === mode && styles.viewToggleBtnActive]}
+                style={[
+                  styles.viewToggleBtn,
+                  viewMode === mode && styles.viewToggleBtnActive,
+                ]}
                 onPress={() => {
-                  LayoutAnimation.configureNext(LayoutAnimation.create(200, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
+                  LayoutAnimation.configureNext(
+                    LayoutAnimation.create(
+                      200,
+                      LayoutAnimation.Types.easeInEaseOut,
+                      LayoutAnimation.Properties.opacity,
+                    ),
+                  );
                   setViewMode(mode);
                 }}
                 activeOpacity={0.7}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: viewMode === mode }}
               >
-                <Text style={[styles.viewToggleText, viewMode === mode && styles.viewToggleTextActive]}>
+                <Text
+                  style={[
+                    styles.viewToggleText,
+                    viewMode === mode && styles.viewToggleTextActive,
+                  ]}
+                >
                   {mode === 'list' ? '목록' : '지도'}
                 </Text>
               </TouchableOpacity>
@@ -262,16 +540,16 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
             accessibilityRole="button"
             accessibilityLabel={`거리 필터: ${RADIUS_LABELS[radius]}`}
           >
-            <Text style={styles.radiusDropdownText}>{RADIUS_LABELS[radius]}</Text>
-            <ChevronDownIcon size={14} color={colors.gray600} />
+            <Text style={styles.radiusDropdownText}>
+              {RADIUS_LABELS[radius]}
+            </Text>
+            <ChevronDownIcon size={spacing.iconXs} color={colors.gray600} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* ─── 콘텐츠 ──────────────────────────────────────────────────── */}
-      <View style={styles.content}>
-        {renderContent()}
-      </View>
+      <View style={styles.content}>{renderContent()}</View>
 
       {/* ─── 거리 드롭다운 모달 ────────────────────────────────────────── */}
       <Modal
@@ -287,14 +565,22 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
         >
           <View style={styles.dropdownMenu}>
             <Text style={styles.dropdownTitle}>거리 범위</Text>
-            {RADIUS_OPTIONS.map((opt) => (
+            {RADIUS_OPTIONS.map(opt => (
               <TouchableOpacity
                 key={opt}
-                style={[styles.dropdownItem, radius === opt && styles.dropdownItemActive]}
+                style={[
+                  styles.dropdownItem,
+                  radius === opt && styles.dropdownItemActive,
+                ]}
                 onPress={() => handleRadiusSelect(opt)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.dropdownItemText, radius === opt && styles.dropdownItemTextActive]}>
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    radius === opt && styles.dropdownItemTextActive,
+                  ]}
+                >
                   {RADIUS_LABELS[opt]}
                 </Text>
                 {radius === opt && <Text style={styles.dropdownCheck}>✓</Text>}
@@ -318,7 +604,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    borderBottomWidth: 1,
+    borderBottomWidth: spacing.borderThin,
     borderBottomColor: colors.gray100,
   },
   headerTopRow: {
@@ -327,33 +613,32 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: spacing.backBtnSize,
+    height: spacing.backBtnSize,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.sm,
   },
-  backBtnText: {
-    ...typography.headingXl,
-    color: colors.black,
-  },
   headerTitleArea: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
+    alignItems: 'center',
   },
-  productName: {
-    ...typography.headingXl,
+  headerTitle: {
+    ...typography.headingMd,
   },
-  priceCount: {
-    ...typography.bodySm,
-    color: colors.gray400,
+  shareBtn: {
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
+    borderRadius: spacing.headerIconSize / 2,
+    backgroundColor: colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
   },
   wishBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
+    borderRadius: spacing.headerIconSize / 2,
     backgroundColor: colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
@@ -383,9 +668,9 @@ const styles = StyleSheet.create({
   viewToggleBtnActive: {
     backgroundColor: colors.white,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: spacing.shadowOffsetY },
     shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowRadius: spacing.shadowRadiusSm,
     elevation: 1,
   },
   viewToggleText: {
@@ -417,19 +702,19 @@ const styles = StyleSheet.create({
   // ─── 드롭다운 모달 ───────────────────────────────────────────────────
   dropdownOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: colors.dropdownOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dropdownMenu: {
     backgroundColor: colors.white,
     borderRadius: spacing.radiusLg,
-    width: 240,
+    width: spacing.dropdownMenuWidth,
     paddingVertical: spacing.md,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYLg },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowRadius: spacing.shadowRadiusLg,
     elevation: 8,
   },
   dropdownTitle: {
@@ -438,7 +723,7 @@ const styles = StyleSheet.create({
     color: colors.gray400,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
+    borderBottomWidth: spacing.borderThin,
     borderBottomColor: colors.gray100,
     marginBottom: spacing.xs,
   },
@@ -466,56 +751,218 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
   },
 
-  // ─── 가격 요약 카드 ──────────────────────────────────────────────────
-  summaryCard: {
-    backgroundColor: colors.white,
+  // ─── 상품 히어로 ─────────────────────────────────────────────────────
+  heroWrapper: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: spacing.radiusLg,
-    padding: spacing.lg,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
   },
-  summaryRow: {
-    flexDirection: 'row',
+  heroImage: {
+    width: '100%',
+    height: spacing.priceImageHeight,
+    backgroundColor: colors.gray100,
+    borderRadius: spacing.radiusXl,
+  },
+  heroPlaceholder: {
+    width: '100%',
+    height: spacing.priceImagePlaceholderHeight,
+    backgroundColor: colors.secondaryBg,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: spacing.radiusXl,
   },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
+  heroEmoji: {
+    fontSize: spacing.avatarInitialFont,
   },
-  summaryDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.gray200,
+  heroOverlayBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.success,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.micro,
   },
-  summaryLabel: {
+  heroOverlayBadgeText: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  heroInfo: {
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  categoryBreadcrumb: {
     ...typography.caption,
     color: colors.gray400,
     marginBottom: spacing.xs,
   },
-  summaryValuePrimary: {
-    ...typography.activityCount,
-    color: colors.primary,
+  heroProductName: {
+    ...typography.headingXl,
+    marginBottom: spacing.sm,
   },
-  summaryValue: {
-    fontSize: spacing.xl,
-    fontWeight: '600' as const,
-    color: colors.black,
+  heroPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
   },
-  summaryValueMuted: {
-    fontSize: spacing.xl,
-    fontWeight: '600' as const,
+  heroMinPrice: {
+    ...typography.price,
+  },
+  heroCount: {
+    ...typography.caption,
     color: colors.gray400,
   },
-  summaryStoreName: {
-    ...typography.caption,
+  heroCheapestStore: {
+    ...typography.bodySm,
     color: colors.gray600,
+  },
+  // ─── 섹션 헤더 ───────────────────────────────────────────────────────
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.white,
+  },
+  sectionTitle: {
+    ...typography.headingMd,
+    color: colors.gray700,
+  },
+  sectionSubtitle: {
+    ...typography.caption,
+    color: colors.gray400,
+  },
+  // ─── 1위 카드 ────────────────────────────────────────────────────────
+  rankFirstCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusMd,
+    borderWidth: spacing.borderMedium,
+    borderColor: colors.primary,
+    overflow: 'hidden',
+    elevation: 2,
+  },
+  rankFirstBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    alignSelf: 'flex-start',
+    borderBottomRightRadius: spacing.radiusMd,
+  },
+  rankFirstBadgeText: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  rankFirstBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  rankFirstStoreThumb: {
+    width: spacing.storeThumbSize,
+    height: spacing.storeThumbSize,
+    borderRadius: spacing.radiusMd,
+    backgroundColor: colors.secondaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankFirstStoreThumbText: {
+    ...typography.headingMd,
+    color: colors.gray600,
+  },
+  rankFirstStoreInfo: {
+    flex: 1,
+  },
+  rankFirstStoreName: {
+    ...typography.headingMd,
+    color: colors.black,
+  },
+  rankFirstDistance: {
+    ...typography.caption,
+    color: colors.gray400,
     marginTop: spacing.micro,
+  },
+  rankFirstPriceBox: {
+    backgroundColor: colors.gray100,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: spacing.radiusSm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  rankFirstPrice: {
+    ...typography.price,
+  },
+  rankFirstRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.md,
+  },
+  rankFirstRouteBtnText: {
+    ...typography.bodySm,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
+  // ─── 2, 3위 그리드 ───────────────────────────────────────────────────
+  rankGrid: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  rankGridCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusMd,
+    padding: spacing.md,
+    elevation: 1,
+  },
+  rankGridTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  rankGridBadge: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.micro,
+  },
+  rankGridBadgeText: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+  rankGridDistance: {
+    ...typography.caption,
+    color: colors.gray400,
+  },
+  rankGridStoreName: {
+    ...typography.bodySm,
+    color: colors.gray900,
+    marginBottom: spacing.xs,
+  },
+  rankGridPrice: {
+    ...typography.headingMd,
+    color: colors.primary,
   },
 
   // ─── 콘텐츠 ─────────────────────────────────────────────────────────

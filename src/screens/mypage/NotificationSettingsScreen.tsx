@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,18 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MyPageScreenProps } from '../../navigation/types';
 import { useNotificationStore } from '../../store/notificationStore';
+import { useAuthStore } from '../../store/authStore';
+import {
+  useNotificationSettingsQuery,
+  useUpdateNotificationSettings,
+} from '../../hooks/queries/useNotificationSettings';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -18,15 +26,20 @@ type Props = MyPageScreenProps<'NotificationSettings'>;
 
 const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const user = useAuthStore((s) => s.user);
 
-  const allNotifications = useNotificationStore(s => s.allNotifications);
-  const priceChangeNotification = useNotificationStore(s => s.priceChangeNotification);
-  const promotionNotification = useNotificationStore(s => s.promotionNotification);
-  const setAllNotifications = useNotificationStore(s => s.setAllNotifications);
-  const setPriceChangeNotification = useNotificationStore(s => s.setPriceChangeNotification);
-  const setPromotionNotification = useNotificationStore(s => s.setPromotionNotification);
+  const allNotifications = useNotificationStore((s) => s.allNotifications);
+  const priceChangeNotification = useNotificationStore((s) => s.priceChangeNotification);
+  const promotionNotification = useNotificationStore((s) => s.promotionNotification);
+  const setAllNotifications = useNotificationStore((s) => s.setAllNotifications);
+  const setPriceChangeNotification = useNotificationStore((s) => s.setPriceChangeNotification);
+  const setPromotionNotification = useNotificationStore((s) => s.setPromotionNotification);
 
-  const [isLoading, setIsLoading] = useState(false);
+  // 서버에서 최신 설정 동기화 (onSuccess에서 syncFromServer 호출)
+  const { isLoading: isQueryLoading } = useNotificationSettingsQuery(user?.id);
+  const { mutate: updateSettings, isPending } = useUpdateNotificationSettings(user?.id);
+
+  const isLoading = isQueryLoading || isPending;
 
   useEffect(() => {
     navigation.setOptions({
@@ -37,32 +50,93 @@ const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
     });
   }, [navigation]);
 
-  const handleAllNotificationsChange = useCallback(async (value: boolean) => {
-    setIsLoading(true);
-    try {
-      // 실제 기기 알림 권한 확인 (추후 구현 가능)
-      // iOS/Android 권한 API 연동 시 여기에 추가
-      setAllNotifications(value);
+  // 화면 포커스 시 OS 권한 상태 재확인 (기기 설정에서 돌아왔을 때 반영)
+  useFocusEffect(
+    useCallback(() => {
+      messaging().hasPermission().then((status) => {
+        const isOsGranted =
+          status === messaging.AuthorizationStatus.AUTHORIZED ||
+          status === messaging.AuthorizationStatus.PROVISIONAL;
+        // OS 권한 거부인데 앱은 ON → 앱도 OFF로 강제 동기화
+        if (!isOsGranted && allNotifications) {
+          setAllNotifications(false);
+          updateSettings({ notifPriceChange: false, notifPromotion: false });
+        }
+      });
+    }, [allNotifications, setAllNotifications, updateSettings]),
+  );
 
-      if (!value) {
-        Alert.alert('알림이 꺼졌습니다', '알림 설정에서 다시 켤 수 있습니다.');
+  const handleAllNotificationsChange = useCallback(async (value: boolean) => {
+    if (value) {
+      // 켜기: OS 권한 확인 먼저
+      const status = await messaging().hasPermission();
+      const isOsGranted =
+        status === messaging.AuthorizationStatus.AUTHORIZED ||
+        status === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (!isOsGranted) {
+        // OS 권한 없음 → 기기 설정으로 이동 안내
+        Alert.alert(
+          '알림 권한이 필요해요',
+          '기기 설정에서 알림을 허용해야 알림을 받을 수 있어요.',
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
       }
-    } catch (err) {
-      console.error('Failed to update notification settings:', err);
-      Alert.alert('오류', '알림 설정을 변경할 수 없습니다.');
-    } finally {
-      setIsLoading(false);
     }
-  }, [setAllNotifications]);
+
+    setAllNotifications(value);
+    updateSettings(
+      { notifPriceChange: value, notifPromotion: value ? promotionNotification : false },
+      {
+        onError: () => {
+          setAllNotifications(!value);
+          Alert.alert('오류', '알림 설정을 변경할 수 없습니다.');
+        },
+        onSuccess: () => {
+          if (!value) {
+            Alert.alert(
+              '앱 알림이 꺼졌습니다',
+              '기기 알림도 끄려면 기기 설정에서 변경하세요.',
+              [
+                { text: '확인' },
+                { text: '기기 설정', onPress: () => Linking.openSettings() },
+              ],
+            );
+          }
+        },
+      },
+    );
+  }, [promotionNotification, setAllNotifications, updateSettings]);
 
   const handlePriceChangeChange = useCallback((value: boolean) => {
     if (!allNotifications) return;
     setPriceChangeNotification(value);
-  }, [allNotifications, setPriceChangeNotification]);
+    updateSettings(
+      { notifPriceChange: value },
+      {
+        onError: () => {
+          setPriceChangeNotification(!value);
+        },
+      },
+    );
+  }, [allNotifications, setPriceChangeNotification, updateSettings]);
 
   const handlePromotionChange = useCallback((value: boolean) => {
+    if (!allNotifications) return;
     setPromotionNotification(value);
-  }, [setPromotionNotification]);
+    updateSettings(
+      { notifPromotion: value },
+      {
+        onError: () => {
+          setPromotionNotification(!value);
+        },
+      },
+    );
+  }, [allNotifications, setPromotionNotification, updateSettings]);
 
   const containerStyle = React.useMemo(
     () => [styles.container, { paddingTop: insets.top }],
@@ -96,6 +170,9 @@ const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
             trackColor={{ false: colors.gray200, true: colors.primaryLight }}
             thumbColor={allNotifications ? colors.primary : colors.gray400}
             style={styles.switch}
+            accessibilityRole="switch"
+            accessibilityLabel="전체 알림"
+            accessibilityState={{ checked: allNotifications, disabled: isLoading }}
           />
         </View>
       </View>
@@ -126,6 +203,9 @@ const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
             trackColor={{ false: colors.gray200, true: colors.primaryLight }}
             thumbColor={priceChangeNotification ? colors.primary : colors.gray400}
             style={styles.switch}
+            accessibilityRole="switch"
+            accessibilityLabel="가격 변동 알림"
+            accessibilityState={{ checked: priceChangeNotification, disabled: !allNotifications || isLoading }}
           />
         </View>
       </View>
@@ -136,20 +216,29 @@ const NotificationSettingsScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.section}>
         <View style={styles.settingRow}>
           <View style={styles.settingContent}>
-            <Text style={styles.settingLabel}>
+            <Text style={[
+              styles.settingLabel,
+              !allNotifications && styles.disabledText,
+            ]}>
               전단지/할인 알림
             </Text>
-            <Text style={styles.settingDescription}>
-              준비 중입니다 🚀
+            <Text style={[
+              styles.settingDescription,
+              !allNotifications && styles.disabledText,
+            ]}>
+              동네 마트 전단지 업데이트 시 알림을 받습니다
             </Text>
           </View>
           <Switch
             value={promotionNotification}
             onValueChange={handlePromotionChange}
-            disabled={true}
+            disabled={!allNotifications || isLoading}
             trackColor={{ false: colors.gray200, true: colors.primaryLight }}
             thumbColor={promotionNotification ? colors.primary : colors.gray400}
             style={styles.switch}
+            accessibilityRole="switch"
+            accessibilityLabel="전단지/할인 알림"
+            accessibilityState={{ checked: promotionNotification, disabled: !allNotifications || isLoading }}
           />
         </View>
       </View>

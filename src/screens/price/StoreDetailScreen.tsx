@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Linking,
   Alert,
+  ScrollView,
+  RefreshControl,
 } from 'react-native';
 import type { HomeScreenProps } from '../../navigation/types';
 import { colors } from '../../theme/colors';
@@ -96,7 +98,7 @@ const openMapApp = async (lat: number, lng: number, name: string) => {
 
 const StoreDetailScreen: React.FC<Props> = ({ route }) => {
   const { storeId } = route.params;
-  const { data: store, isLoading, isError, refetch } = useStoreDetail(storeId);
+  const { data: store, isLoading, isError, isRefetching, refetch } = useStoreDetail(storeId);
 
   const handleDirections = useCallback(async () => {
     if (!store) return;
@@ -142,11 +144,21 @@ const StoreDetailScreen: React.FC<Props> = ({ route }) => {
         </MapViewWrapper>
       </View>
 
-      <View style={styles.infoContainer}>
+      <ScrollView
+        style={styles.infoContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         <View style={styles.storeHeader}>
           <Text style={styles.storeName}>{store.name}</Text>
           <View style={styles.storeTypeBadge}>
-            <Text style={styles.storeTypeText}>{STORE_TYPE_LABELS[store.type]}</Text>
+            <Text style={styles.storeTypeText}>{STORE_TYPE_LABELS[store.type] ?? store.type}</Text>
           </View>
         </View>
         <Text style={styles.storeAddress}>{store.address}</Text>
@@ -159,7 +171,7 @@ const StoreDetailScreen: React.FC<Props> = ({ route }) => {
         >
           <Text style={styles.directionsButtonText}>지도로 길찾기</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 };

@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, View, ActivityIndicator, type ViewStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, type ViewStyle } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -30,6 +31,35 @@ const Button: React.FC<Props> = ({
 }) => {
   const isDisabled = disabled || loading;
 
+  const content = loading ? (
+    <ActivityIndicator color={variant === 'primary' ? colors.onPrimary : colors.primary} />
+  ) : (
+    <Text style={[styles.text, styles[`text_${size}`], styles[`text_${variant}`]]}>{label}</Text>
+  );
+
+  if (variant === 'primary') {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={isDisabled}
+        activeOpacity={0.85}
+        style={[styles.touchable, fullWidth && styles.fullWidth, style]}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isDisabled }}
+        accessibilityLabel={label}
+      >
+        <LinearGradient
+          colors={isDisabled ? [colors.gray400, colors.gray400] : [colors.primary, colors.primaryContainer]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.base, styles[size]]}
+        >
+          {content}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={[
@@ -47,20 +77,18 @@ const Button: React.FC<Props> = ({
       accessibilityState={{ disabled: isDisabled }}
       accessibilityLabel={label}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.white : colors.primary} />
-      ) : (
-        <Text style={[styles.text, styles[`text_${variant}`], styles[`text_${size}`]]}>
-          {label}
-        </Text>
-      )}
+      {content}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
+  touchable: {
+    borderRadius: spacing.radiusButton,
+    overflow: 'hidden',
+  },
   base: {
-    borderRadius: spacing.radiusMd,
+    borderRadius: spacing.radiusButton,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -82,38 +110,33 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   // Variants
-  primary: {
-    backgroundColor: colors.primary,
-  },
+  primary: {},
   secondary: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surfaceContainerHighest,
   },
   outline: {
     backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    borderWidth: spacing.borderEmphasis,
+    borderColor: colors.outlineVariant,
   },
   ghost: {
     backgroundColor: 'transparent',
   },
-  // Disabled state
+  // Disabled state (non-primary)
   disabled: {
-    backgroundColor: colors.gray400,
-    opacity: 0.6,
+    opacity: spacing.disabledOpacity,
   },
   // Full width
   fullWidth: {
     width: '100%',
   },
   // Text styles
-  text: {
-    fontWeight: '600' as const,
-  },
+  text: {},
   text_primary: {
-    color: colors.white,
+    color: colors.onPrimary,
   },
   text_secondary: {
-    color: colors.primary,
+    color: colors.onBackground,
   },
   text_outline: {
     color: colors.primary,

@@ -16,25 +16,30 @@ export const useMyWishlist = () => {
 
 export const useAddWishlist = () => {
   const queryClient = useQueryClient();
+  const showToast = useToastStore(s => s.showToast);
   return useMutation({
     mutationFn: (productId: string) => wishlistApi.add(productId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: wishlistKeys.mine });
+      showToast('찜 목록에 추가됐어요.', 'success');
+    },
+    onError: () => {
+      showToast('찜 추가에 실패했어요. 다시 시도해 주세요.', 'error');
     },
   });
 };
 
 export const useRemoveWishlist = () => {
   const queryClient = useQueryClient();
+  const showToast = useToastStore(s => s.showToast);
   return useMutation({
     mutationFn: (productId: string) => wishlistApi.remove(productId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: wishlistKeys.mine });
-      // 컴포넌트 언마운트 여부와 무관하게 실행되도록 훅 레벨에서 toast 처리
-      useToastStore.getState().showToast('찜 목록에서 삭제했어요', 'info');
+      showToast('찜 목록에서 삭제됐어요.', 'success');
     },
     onError: () => {
-      useToastStore.getState().showToast('삭제에 실패했어요', 'error');
+      showToast('삭제에 실패했어요. 다시 시도해 주세요.', 'error');
     },
   });
 };

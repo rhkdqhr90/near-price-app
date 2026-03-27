@@ -29,23 +29,30 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     id: '1',
-    title: '양파 1kg, 어디가 제일 싸?',
-    subtitle: '동네 마트 가격을 한눈에 비교하고 제일 싼 곳으로 바로 가요',
+    title: '우리 동네 최저가를 찾아보세요',
+    subtitle: '마트별 가격을 비교하고, 가장 싼 곳을 찾으세요',
     Icon: WonIcon,
   },
   {
     id: '2',
-    title: '사진 한 장이면 가격 등록 끝',
-    subtitle: '가격표를 찍으면 자동으로 인식해요 이웃과 함께 만드는 가격 지도',
+    title: '사진만 찍으면 가격 등록 완료',
+    subtitle: '가격표를 찍으면 OCR로 자동 인식돼요',
     Icon: CameraIcon,
+  },
+  {
+    id: '3',
+    title: '동네 사람들이 함께 만드는 가격 정보',
+    subtitle: '가격을 등록하고 검증하면 뱃지를 받아요',
+    Icon: WonIcon,
   },
 ];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const SKIP_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 } as const;
-const ONBOARDING_ICON_SIZE = 96;
-const ONBOARDING_ICON_RADIUS = 48;
+const ONBOARDING_ICON_SIZE = 120;
+const ONBOARDING_ICON_RADIUS = 60;
+const ONBOARDING_ICON_INNER_SIZE = 64;
 
 const OnboardingIntroScreen: React.FC<OnboardingIntroScreenProps> = ({ navigation }) => {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -78,7 +85,7 @@ const OnboardingIntroScreen: React.FC<OnboardingIntroScreenProps> = ({ navigatio
     return (
       <View style={styles.slide}>
         <View style={styles.iconWrapper}>
-          <Icon size={48} color={colors.primary} />
+          <Icon size={ONBOARDING_ICON_INNER_SIZE} color={colors.primary} />
         </View>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.subtitle}>{item.subtitle}</Text>

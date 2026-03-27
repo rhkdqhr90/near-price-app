@@ -30,4 +30,5 @@ export const STORAGE_KEYS = {
   USER: '@nearprice/user',
   LOCATION: '@nearprice/location',
   ONBOARDING_SEEN: '@nearprice/onboarding_seen',
+  RECENT_SEARCHES: '@nearprice/recent_searches',
 } as const;

@@ -1,9 +1,9 @@
 import { apiClient } from './client';
-import type { PriceResponse, CreatePriceDto, UpdatePriceDto } from '../types/api.types';
+import type { PriceResponse, CreatePriceDto, UpdatePriceDto, PaginatedResponse, ProductPriceCard } from '../types/api.types';
 
 export const priceApi = {
-  getRecent: () =>
-    apiClient.get<PriceResponse[]>('/price/recent'),
+  getRecent: (page = 1, limit = 20) =>
+    apiClient.get<PaginatedResponse<ProductPriceCard>>('/price/recent', { params: { page, limit } }),
 
   getByProduct: (productId: string) =>
     apiClient.get<PriceResponse[]>(`/price/product/${productId}`),
@@ -15,7 +15,7 @@ export const priceApi = {
     apiClient.get<PriceResponse[]>('/price'),
 
   getMy: () =>
-    apiClient.get<PriceResponse[]>('/price/my'),
+    apiClient.get<PaginatedResponse<PriceResponse>>('/price/my'),
 
   getOne: (id: string) =>
     apiClient.get<PriceResponse>(`/price/${id}`),

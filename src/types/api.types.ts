@@ -24,6 +24,8 @@ export interface UserResponse {
   latitude: number | null;
   longitude: number | null;
   trustScore: number;
+  notifPriceChange: boolean;
+  notifPromotion: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -116,6 +118,15 @@ export interface CreateProductDto {
   unitType: UnitType;
 }
 
+// ─── Paginated ──────────────────────────────────────────────────────────────
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 // ─── Price ─────────────────────────────────────────────────────────────────
 
 export interface PriceResponse {
@@ -129,6 +140,7 @@ export interface PriceResponse {
   saleStartDate: string | null;
   saleEndDate: string | null;
   condition: string | null;
+  isActive: boolean;
   likeCount: number;
   reportCount: number;
   trustScore: number | null;
@@ -280,6 +292,25 @@ export interface VerificationResponse {
   createdAt: string;
 }
 
+export interface MyVerificationItem {
+  id: string;
+  priceId: string;
+  result: VerificationResult;
+  actualPrice: number | null;
+  price: {
+    id: string;
+    price: number;
+    product: { id: string; name: string };
+    store: { id: string; name: string };
+  };
+  createdAt: string;
+}
+
+export interface MyVerificationsResponse {
+  data: MyVerificationItem[];
+  meta: { total: number };
+}
+
 export interface PriceTrustScoreResponse {
   priceId: string;
   trustScore: number | null;
@@ -354,6 +385,85 @@ export interface CreateInquiryDto {
   title: string;
   content: string;
   email: string;
+}
+
+// ─── Flyer ─────────────────────────────────────────────────────────────────
+
+export interface FlyerProductItem {
+  id: string;
+  name: string;
+  emoji: string;
+  originalPrice: number | null;
+  salePrice: number;
+  badges: Array<{ label: string; type: 'red' | 'yellow' | 'blue' }>;
+}
+
+export interface FlyerReviewItem {
+  id: string;
+  name: string;
+  initial: string;
+  meta: string;
+  content: string;
+  helpfulCount?: number;
+  avatarColor: string;
+}
+
+export interface FlyerResponse {
+  id: string;
+  storeName: string;
+  promotionTitle: string;
+  badge: string;
+  badgeColor: string;
+  dateRange: string;
+  highlight: string;
+  bgColor: string;
+  emoji: string;
+  warningText: string | null;
+  ownerQuote: string | null;
+  ownerName: string | null;
+  ownerRole: string | null;
+  storeAddress: string | null;
+  storeRating: number | null;
+  storeReviewCount: number | null;
+  products: FlyerProductItem[] | null;
+  reviews: FlyerReviewItem[] | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OwnerPostResponse {
+  id: string;
+  ownerName: string;
+  badge: string;
+  message: string;
+  emoji: string;
+  likeCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── ProductPriceCard (홈 무한스크롤용 상품별 집계) ──────────────────────────
+
+export interface ProductPriceCard {
+  productId: string;
+  productName: string;
+  unitType: string | null;
+  minPrice: number;
+  maxPrice: number;
+  storeCount: number;
+  cheapestStore: {
+    id: string;
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+  imageUrl: string | null;
+  quantity: string | null;
+  hasClosingDiscount: boolean;
+  createdAt: string;
+  registrant: { nickname: string; profileImageUrl: string | null } | null;
 }
 
 // ─── Error ─────────────────────────────────────────────────────────────────

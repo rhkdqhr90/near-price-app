@@ -28,6 +28,7 @@ const PriceRankCard: React.FC<Props> = ({ rank, price, onPress }) => {
   const isReported = reactions?.myReaction === 'report';
   const confirmCount = reactions?.confirmCount ?? 0;
 
+  const handlePress = useCallback(() => onPress(price), [onPress, price]);
   const handleConfirm = useCallback(() => confirm(), [confirm]);
   const handleMore = useCallback(() => {
     if (!isReported) sheetRef.current?.present();
@@ -40,7 +41,7 @@ const PriceRankCard: React.FC<Props> = ({ rank, price, onPress }) => {
     <>
       <TouchableOpacity
         style={[styles.card, isTopRank && styles.cardTop]}
-        onPress={() => onPress(price)}
+        onPress={handlePress}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={`${rank}위 ${price.store?.name ?? '매장'} ${formatPrice(price.price)}`}
@@ -59,6 +60,11 @@ const PriceRankCard: React.FC<Props> = ({ rank, price, onPress }) => {
             </Text>
             <Text style={styles.timeText}>{formatRelativeTime(price.createdAt)}</Text>
           </View>
+          {price.trustScore != null && (
+            <View style={styles.trustBadge}>
+              <Text style={styles.trustBadgeText}>✓ {Math.round(price.trustScore)}%</Text>
+            </View>
+          )}
         </View>
 
         {/* 맞아요 버튼 */}
@@ -70,7 +76,7 @@ const PriceRankCard: React.FC<Props> = ({ rank, price, onPress }) => {
           accessibilityRole="button"
           accessibilityLabel={`맞아요 ${confirmCount}`}
         >
-          <ThumbUpIcon size={14} color={isConfirmed ? colors.primary : colors.gray400} filled={isConfirmed} />
+          <ThumbUpIcon size={spacing.iconXs} color={isConfirmed ? colors.primary : colors.gray400} filled={isConfirmed} />
           {confirmCount > 0 && (
             <Text style={[styles.confirmCount, isConfirmed && styles.confirmCountActive]}>
               {confirmCount}
@@ -88,7 +94,7 @@ const PriceRankCard: React.FC<Props> = ({ rank, price, onPress }) => {
           accessibilityRole="button"
           accessibilityLabel="더보기"
         >
-          <MoreIcon size={16} color={isReported ? colors.danger : colors.gray400} />
+          <MoreIcon size={spacing.iconSm} color={isReported ? colors.danger : colors.gray400} />
         </TouchableOpacity>
       </TouchableOpacity>
       <ReportSheet ref={sheetRef} onReport={handleReport} />
@@ -106,18 +112,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     borderRadius: spacing.radiusMd,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: colors.gray200,
   },
   cardTop: {
     borderColor: colors.accent,
-    borderWidth: 1.5,
-    backgroundColor: '#FFFAF5',
+    borderWidth: spacing.borderMedium,
+    backgroundColor: colors.accentSurface,
   },
   rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: spacing.rankBadgeSize,
+    height: spacing.rankBadgeSize,
+    borderRadius: spacing.rankBadgeSize / 2,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.sm,
@@ -129,9 +135,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
   },
   rankText: {
-    fontSize: 13,
+    ...typography.bodySm,
     fontWeight: '700' as const,
-    color: colors.gray600,
   },
   rankTextTop: {
     color: colors.white,
@@ -143,7 +148,7 @@ const styles = StyleSheet.create({
   storeName: {
     ...typography.bodySm,
     color: colors.gray600,
-    marginBottom: 1,
+    marginBottom: spacing.micro,
   },
   priceRow: {
     flexDirection: 'row',
@@ -165,7 +170,7 @@ const styles = StyleSheet.create({
   confirmBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: spacing.micro,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     borderRadius: spacing.radiusFull,
@@ -175,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
   },
   confirmCount: {
-    fontSize: 12,
+    ...typography.caption,
     fontWeight: '600' as const,
     color: colors.gray600,
   },
@@ -185,6 +190,18 @@ const styles = StyleSheet.create({
   moreBtn: {
     padding: spacing.xs,
     marginLeft: spacing.xs,
+  },
+  trustBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.successLight,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.micro,
+    marginTop: spacing.micro,
+  },
+  trustBadgeText: {
+    ...typography.captionBold,
+    color: colors.success,
   },
 });
 

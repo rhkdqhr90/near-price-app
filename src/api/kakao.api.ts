@@ -85,7 +85,7 @@ export const kakaoApi = {
 
       return null;
     } catch (error) {
-      console.error('[kakaoApi.reverseGeocode] Error:', error);
+      if (__DEV__) { console.error('[kakaoApi.reverseGeocode] Error:', error); }
       throw error;
     }
   },

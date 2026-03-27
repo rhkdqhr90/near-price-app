@@ -2,20 +2,7 @@ import axios from 'axios';
 import { NAVER_SEARCH_CLIENT_ID, NAVER_SEARCH_CLIENT_SECRET } from '../utils/config';
 import { vworldApi } from './vworld.api';
 import { kakaoApi } from './kakao.api';
-
-// ─── Nominatim (OpenStreetMap) — 주소 검색 전용 ─────────────────────
-
-const nominatimClient = axios.create({
-  baseURL: 'https://nominatim.openstreetmap.org',
-  timeout: 10000,
-  headers: { 'User-Agent': 'NearPriceApp/1.0 (contact@nearprice.kr)' },
-});
-
-interface NominatimSearchItem {
-  display_name: string;
-  lat: string;
-  lon: string;
-}
+import { naverMapsApi } from './naver-maps.api';
 
 // LocationSetupScreen 주소 검색 결과 형식
 export interface NaverGeocodeResult {
@@ -62,32 +49,41 @@ interface NaverLocalResponse {
 
 export const naverLocalApi = {
   // 역지오코딩: 좌표 → 동 이름 변환
-  // 1순위: Vworld (국토교통부, 심사 불필요)
-  // 2순위: 카카오 (카카오맵 심사 통과 후 활성화)
+  // 1순위: Naver Reverse Geocoding (NCP Maps API)
+  // 2순위: Vworld (국토교통부, 심사 불필요)
+  // 3순위: 카카오 (카카오맵 심사 통과 후 활성화)
   coord2Region: async (longitude: number, latitude: number): Promise<string | null> => {
     try {
-      return await vworldApi.reverseGeocode(longitude, latitude);
+      const res = await naverMapsApi.reverseGeocode(longitude, latitude);
+      const result = res.data.results?.[0];
+      const area3 = result?.region?.area3?.name;
+      const area2 = result?.region?.area2?.name;
+      if (area3) return area2 ? `${area2} ${area3}` : area3;
+      throw new Error('no region data');
     } catch {
-      // Vworld 실패 시 카카오 폴백
+      // Naver 실패 시 Vworld 폴백
       try {
-        return await kakaoApi.reverseGeocode(longitude, latitude);
+        return await vworldApi.reverseGeocode(longitude, latitude);
       } catch {
-        return null;
+        // Vworld 실패 시 카카오 폴백
+        try {
+          return await kakaoApi.reverseGeocode(longitude, latitude);
+        } catch {
+          return null;
+        }
       }
     }
   },
 
-  // 주소/동 이름 검색: 텍스트 → 좌표 목록 (Nominatim)
-  // roadAddress: 목록 표시용 전체 주소 / jibunAddress: 저장용 동 이름(첫 번째 토큰)
+  // 주소/동 이름 검색: 텍스트 → 좌표 목록 (Naver Geocoding API)
+  // roadAddress: 목록 표시용 전체 주소 / jibunAddress: 저장용 지번 주소
   searchAddress: async (query: string): Promise<NaverGeocodeResult[]> => {
-    const res = await nominatimClient.get<NominatimSearchItem[]>('/search.php', {
-      params: { q: query, countrycodes: 'kr', format: 'json', 'accept-language': 'ko', limit: 10 },
-    });
-    return res.data.map(item => ({
-      roadAddress: item.display_name,
-      jibunAddress: item.display_name.split(',')[0].trim(),
-      x: item.lon,
-      y: item.lat,
+    const res = await naverMapsApi.geocode(query);
+    return (res.data.addresses ?? []).map(item => ({
+      roadAddress: item.roadAddress,
+      jibunAddress: item.jibunAddress,
+      x: item.x,
+      y: item.y,
     }));
   },
 
@@ -97,7 +93,7 @@ export const naverLocalApi = {
     const res = await naverSearchClient.get<NaverLocalResponse>('/search/local.json', {
       params: { query: searchQuery, display: 10, sort: 'random' },
     });
-    return res.data.items.map((item) => {
+    return (res.data.items ?? []).map((item) => {
       // Naver Search API mapx/mapy는 소수점 없는 정수 (경도/위도 × 1e7)
       const lng = (parseInt(item.mapx, 10) / 1e7).toFixed(7);
       const lat = (parseInt(item.mapy, 10) / 1e7).toFixed(7);

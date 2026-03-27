@@ -61,13 +61,11 @@ jobs:
           EOF
           cat .env
 
-      - name: 린팅 (선택사항)
-        run: npm run lint --if-present
-        continue-on-error: true
+      - name: 린팅
+        run: npm run lint
 
-      - name: 테스트 실행 (선택사항)
-        run: npm run test --if-present
-        continue-on-error: true
+      - name: 테스트 실행
+        run: npm test -- --passWithNoTests
 
       - name: 안드로이드 폴더 권한 설정
         run: chmod +x android/gradlew
@@ -79,20 +77,17 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KAKAO_APP_KEY: ${{ secrets.KAKAO_APP_KEY }}
+          NAVER_MAP_CLIENT_ID: ${{ secrets.NAVER_MAP_CLIENT_ID }}
         run: |
           # Keystore 파일 생성
           echo $KEYSTORE_BASE64 | base64 -d > android/app/release.keystore
 
-          # gradle.properties 설정
-          cat > android/gradle.properties << EOF
-          org.gradle.jvmargs=-Xmx4096m -XX:+UseParallelGC
-          android.useNewApkStructure=true
-          android.enableDexingArtifactTransform=false
-          KEYSTORE_PATH=./app/release.keystore
-          KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD
-          KEY_ALIAS=$KEY_ALIAS
-          KEY_PASSWORD=$KEY_PASSWORD
-          EOF
+          # 키스토어 서명 설정을 gradle.properties에 추가
+          echo "KEYSTORE_PATH=./release.keystore" >> android/gradle.properties
+          echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}" >> android/gradle.properties
+          echo "KEY_ALIAS=${KEY_ALIAS}" >> android/gradle.properties
+          echo "KEY_PASSWORD=${KEY_PASSWORD}" >> android/gradle.properties
 
           # Release 빌드
           cd android
