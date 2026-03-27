@@ -32,7 +32,7 @@ import DocumentIcon from '../../components/icons/DocumentIcon';
 import HelpCircleIcon from '../../components/icons/HelpCircleIcon';
 import CheckIcon from '../../components/icons/CheckIcon';
 import { APP_VERSION } from '../../utils/config';
-import { isAxiosError } from '../../api/client';
+import { isAxiosError, isCancel } from '../../api/client';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -83,14 +83,24 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
   const [checkingNickname, setCheckingNickname] = useState(false);
 
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setNickname(currentNickname);
+      setError(null);
+      setCheckingNickname(false);
+    }
+  }, [visible, currentNickname]);
 
   useEffect(() => {
     return () => {
       if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
 
-  const handleChangeNickname = (text: string) => {
+  const handleChangeNickname = useCallback((text: string) => {
     // 한글 자모(ㄱ-ㅎ, ㅏ-ㅣ) + 완성형(가-힣) + 영문 + 숫자 허용
     // 조합 중인 한글을 허용하기 위해 자모도 포함
     const filteredText = text.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9]/g, '');
@@ -107,26 +117,33 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
 
     // 중복 확인은 debounce (키보드 안 내려감)
     if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     if (limitedText.length >= 2 && limitedText !== currentNickname) {
       checkTimerRef.current = setTimeout(async () => {
         // 완성형 한글인지 최종 확인
         if (!/^[가-힣a-zA-Z0-9]{2,6}$/.test(limitedText)) return;
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
         setCheckingNickname(true);
         try {
-          const response = await userApi.checkNicknameAvailable(limitedText);
+          const response = await userApi.checkNicknameAvailable(limitedText, controller.signal);
           if (!response.available) {
             setError('이미 사용 중인 닉네임입니다');
           }
-        } catch {
+        } catch (err) {
+          if (isCancel(err)) return;
           // 네트워크 에러 무시 (제출 시 다시 확인)
         } finally {
           setCheckingNickname(false);
         }
       }, 500);
     }
-  };
+  }, [currentNickname]);
 
-  const handleUpdate = async () => {
+  const handleUpdate = useCallback(async () => {
     const validationError = getNicknameError(nickname);
     if (validationError) {
       setError(validationError);
@@ -147,15 +164,22 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
 
       if (isAxiosError(err)) {
         const status = err.response?.status;
-        const data = err.response?.data as { message?: string } | undefined;
+        const rawData: unknown = err.response?.data;
+        const apiMessage: string | undefined =
+          rawData !== null &&
+          typeof rawData === 'object' &&
+          'message' in rawData &&
+          typeof (rawData as Record<string, unknown>).message === 'string'
+            ? (rawData as Record<string, unknown>).message as string
+            : undefined;
         if (status === 409) {
           message = '이미 사용 중인 닉네임입니다';
         } else if (status === 400) {
-          message = data?.message ?? '유효하지 않은 닉네임입니다';
+          message = apiMessage ?? '유효하지 않은 닉네임입니다';
         } else if (status === 429) {
           message = '너무 빠르게 변경했습니다. 잠시 후 다시 시도해주세요';
-        } else if (data?.message) {
-          message = data.message;
+        } else if (apiMessage) {
+          message = apiMessage;
         }
       } else if (err instanceof Error) {
         message = err.message;
@@ -165,9 +189,14 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [nickname, currentNickname, onUpdate, onClose]);
 
   const handleClose = () => {
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setNickname(currentNickname);
     setError(null);
     setCheckingNickname(false);

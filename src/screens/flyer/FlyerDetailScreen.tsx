@@ -40,7 +40,7 @@ const ProductCell: React.FC<{ item: FlyerProductItem }> = ({ item }) => {
   return (
     <View style={styles.productCell}>
       {/* 뱃지 */}
-      {item.badges.length > 0 && (
+      {(item.badges ?? []).length > 0 && (
         <View style={styles.badgeWrap}>
           {item.badges.map((badge) => (
             <View key={badge.label} style={badgeStyleMap[badge.type]}>
@@ -91,8 +91,10 @@ const ReviewCard: React.FC<{ item: FlyerReviewItem }> = ({ item }) => (
     {item.helpfulCount !== undefined && (
       <TouchableOpacity
         style={styles.helpfulBtn}
+        disabled={true}
         accessibilityRole="button"
         accessibilityLabel={`도움돼요 ${item.helpfulCount}`}
+        accessibilityState={{ disabled: true }}
       >
         <ThumbUpIcon size={13} color={colors.primary} />
         <Text style={styles.helpfulText}>도움돼요 {item.helpfulCount}</Text>
@@ -282,7 +284,7 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
             <View style={styles.ratingRow}>
               <Text style={styles.ratingStars}>{ratingStars}</Text>
-              <Text style={styles.ratingNum}>{flyer.storeRating}</Text>
+              <Text style={styles.ratingNum}>{flyer.storeRating ?? '-'}</Text>
               <Text style={styles.ratingCount}>(리뷰 {flyer.storeReviewCount ?? '-'})</Text>
             </View>
             <View style={styles.martBtns}>

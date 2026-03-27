@@ -9,8 +9,8 @@ if (Config.SENTRY_DSN) {
   });
 }
 
-import React, { useCallback } from 'react';
-import { StatusBar, StyleSheet, UIManager, Platform } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AppState, AppStateStatus, StatusBar, StyleSheet, UIManager, Platform, View } from 'react-native';
 
 // Android에서 LayoutAnimation 사용을 위한 필수 설정
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -26,9 +26,23 @@ import BootSplash from 'react-native-bootsplash';
 import RootNavigator from './src/navigation/RootNavigator';
 import Toast from './src/components/common/Toast';
 import OfflineBanner from './src/components/common/OfflineBanner';
+import { colors } from './src/theme/colors';
 
 
 function App(): React.JSX.Element {
+  const [isBackground, setIsBackground] = useState(false);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'inactive' || nextAppState === 'background') {
+        setIsBackground(true);
+      } else if (nextAppState === 'active') {
+        setIsBackground(false);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   const handleNavigationReady = useCallback(() => {
     BootSplash.hide({ fade: true });
   }, []);
@@ -48,6 +62,7 @@ function App(): React.JSX.Element {
           </BottomSheetModalProvider>
         </SafeAreaProvider>
       </QueryClientProvider>
+      {isBackground && <View style={styles.privacyOverlay} />}
     </GestureHandlerRootView>
     </Sentry.ErrorBoundary>
   );
@@ -56,6 +71,12 @@ function App(): React.JSX.Element {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  privacyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.white,
+    zIndex: 9999,
+    elevation: 9999,
   },
 });
 

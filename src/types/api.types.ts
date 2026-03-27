@@ -14,6 +14,8 @@ export interface RefreshTokenDto {
   refreshToken: string;
 }
 
+export type RefreshTokenResponse = Pick<AuthTokens, 'accessToken' | 'refreshToken'>;
+
 // ─── User ──────────────────────────────────────────────────────────────────
 
 export interface UserResponse {
@@ -464,6 +466,18 @@ export interface ProductPriceCard {
   hasClosingDiscount: boolean;
   createdAt: string;
   registrant: { nickname: string; profileImageUrl: string | null } | null;
+}
+
+// ─── Common ────────────────────────────────────────────────────────────────
+
+export interface SuccessResponse {
+  success: boolean;
+}
+
+// ─── Inquiry / Reaction DTOs ───────────────────────────────────────────────
+
+export interface CreateReportDto {
+  reason: string;
 }
 
 // ─── Error ─────────────────────────────────────────────────────────────────

@@ -13,12 +13,13 @@ import {
   FlatList,
 } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { isAxiosError } from '../../api/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MyPageScreenProps } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
 import { inquiryApi } from '../../api/inquiry.api';
 import type { CreateInquiryDto, InquiryResponse } from '../../types/api.types';
+import { formatDate } from '../../utils/format';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -46,7 +47,7 @@ const InquiryScreen: React.FC<Props> = ({ navigation }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
-  const { data: myInquiries, isLoading: isLoadingHistory, refetch: refetchHistory } = useQuery({
+  const { data: myInquiries, isLoading: isLoadingHistory } = useQuery({
     queryKey: ['inquiries', 'my'],
     queryFn: () => inquiryApi.getMyInquiries().then(r => r.data),
     enabled: activeTab === 'history',
@@ -66,10 +67,10 @@ const InquiryScreen: React.FC<Props> = ({ navigation }) => {
     },
     onError: (error: unknown) => {
       let message = '문의 제출에 실패했습니다.';
-      if (axios.isAxiosError(error)) {
+      if (isAxiosError(error)) {
         const data: unknown = error.response?.data;
-        if (data !== null && typeof data === 'object' && 'message' in data && typeof (data as Record<string, unknown>).message === 'string') {
-          message = (data as Record<string, string>).message;
+        if (data !== null && typeof data === 'object' && 'message' in data && typeof (data as { message?: unknown }).message === 'string') {
+          message = (data as { message: string }).message;
         } else if (error.response?.status === 400) {
           message = '입력값이 올바르지 않습니다.';
         }
@@ -111,7 +112,7 @@ const InquiryScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.replyText}>{item.adminReply}</Text>
         </View>
       ) : null}
-      <Text style={styles.historyDate}>{new Date(item.createdAt).toLocaleDateString('ko-KR')}</Text>
+      <Text style={styles.historyDate}>{formatDate(item.createdAt)}</Text>
     </View>
   ), []);
 
@@ -146,7 +147,7 @@ const InquiryScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'history' && styles.tabActive]}
-          onPress={() => { setActiveTab('history'); void refetchHistory(); }}
+          onPress={() => setActiveTab('history')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'history' }}>
           <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>문의 내역</Text>

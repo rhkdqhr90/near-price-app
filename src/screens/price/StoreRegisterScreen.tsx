@@ -53,6 +53,10 @@ const StoreRegisterScreen: React.FC<Props> = ({ route, navigation }) => {
   const { mutate: createStore, isPending: isCreating } = useMutation({
     mutationFn: (dto: CreateStoreDto) => storeApi.create(dto).then(r => r.data),
     onSuccess: created => {
+      if (!created?.id || !created?.name) {
+        Alert.alert('오류', '매장 등록에 실패했습니다.');
+        return;
+      }
       setStore(created.id, created.name);
       navigation.navigate('InputMethod');
     },
@@ -67,7 +71,7 @@ const StoreRegisterScreen: React.FC<Props> = ({ route, navigation }) => {
     setErrors({});
     createStore({
       name: storeName.trim(),
-      type: storeType as StoreType,
+      type: storeType,
       latitude,
       longitude,
       address: storeAddress.trim(),
@@ -217,8 +221,8 @@ const styles = StyleSheet.create({
   backBtn: {
     position: 'absolute',
     left: spacing.lg,
-    width: 36, height: 36,
-    borderRadius: 18,
+    width: spacing.backBtnSize, height: spacing.backBtnSize,
+    borderRadius: spacing.backBtnSize / 2,
     backgroundColor: colors.white,
     justifyContent: 'center', alignItems: 'center',
     shadowColor: colors.black, shadowOffset: { width: 0, height: 2 },

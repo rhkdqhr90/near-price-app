@@ -57,7 +57,6 @@ const styles = StyleSheet.create({
     color: colors.gray700,
     textAlign: 'center',
     marginBottom: spacing.md,
-    fontSize: 18,
   },
   subtitle: {
     ...typography.body,

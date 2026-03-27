@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  SafeAreaView,
   ActivityIndicator,
   TextInput,
   Share,
@@ -14,11 +13,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+// PriceDetail은 HomeStackParamList에 등록된 화면이므로 HomeScreenProps 사용이 올바름
 import type { HomeScreenProps } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { formatPrice, formatRelativeTime, fixImageUrl } from '../../utils/format';
+import { formatPrice, formatRelativeTime, fixImageUrl, formatDate } from '../../utils/format';
 import EmptyState from '../../components/common/EmptyState';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import { useVerifications, useVerifyPrice } from '../../hooks/queries/useVerification';
@@ -58,13 +59,29 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   ) ?? false;
 
   const handleConfirmPrice = useCallback(() => {
-    verifyPrice({ result: 'confirmed' });
-  }, [verifyPrice]);
+    verifyPrice(
+      { result: 'confirmed' },
+      {
+        onError: () => {
+          showToast('가격 확인 처리에 실패했습니다.', 'error');
+        },
+      },
+    );
+  }, [verifyPrice, showToast]);
 
   const handleDisputeSubmit = useCallback(() => {
-    const actualPrice = parseInt(disputePrice, 10);
-    if (isNaN(actualPrice) || actualPrice <= 0) {
-      showToast('올바른 가격을 입력해 주세요', 'error');
+    const trimmed = disputePrice.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      showToast('숫자만 입력해 주세요', 'error');
+      return;
+    }
+    const actualPrice = parseInt(trimmed, 10);
+    if (actualPrice <= 0) {
+      showToast('0원보다 큰 가격을 입력해 주세요', 'error');
+      return;
+    }
+    if (actualPrice > 10_000_000) {
+      showToast('10,000,000원 이하로 입력해 주세요', 'error');
       return;
     }
     verifyPrice(
@@ -84,7 +101,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleShare = useCallback(async () => {
     if (!price) return;
     try {
-      const message = `[마실] ${price.product?.name ?? '상품'} ${formatPrice(price.price)} - ${price.store.name}\n${price.store.address}\n내 동네 최저가를 찾아보세요!`;
+      const message = `[마실] ${price.product.name} ${formatPrice(price.price)} - ${price.store.name}\n${price.store.address}\n내 동네 최저가를 찾아보세요!`;
       await Share.share({
         message,
       });
@@ -141,7 +158,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         >
           <Text style={styles.backButtonText}>← 뒤로</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{price.product?.name ?? '상품'}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{price.product.name}</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -158,7 +175,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             style={styles.priceImage}
             resizeMode="cover"
             accessible={true}
-            accessibilityLabel={`${price.product?.name ?? '상품'} 가격표 사진`}
+            accessibilityLabel={`${price.product.name} 가격표 사진`}
           />
         ) : (
           <View style={styles.priceImagePlaceholder} accessible={true} accessibilityLabel="사진 없음">
@@ -335,9 +352,9 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>세일 기간</Text>
             <Text style={styles.sectionValue}>
-              {price.saleStartDate && `${price.saleStartDate.toString().split('T')[0]}`}
+              {price.saleStartDate && formatDate(price.saleStartDate)}
               {price.saleStartDate && price.saleEndDate && ' ~ '}
-              {price.saleEndDate && `${price.saleEndDate.toString().split('T')[0]}`}
+              {price.saleEndDate && formatDate(price.saleEndDate)}
             </Text>
           </View>
         ) : null}
@@ -353,76 +370,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             })}
           </Text>
         </View>
-
-        {/* 달라요 모달 */}
-        <Modal
-          visible={showDisputeModal}
-          transparent
-          animationType="slide"
-          onRequestClose={() => {
-            setShowDisputeModal(false);
-            setDisputePrice('');
-          }}
-        >
-          <KeyboardAvoidingView
-            style={styles.modalOverlay}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <TouchableOpacity
-              style={styles.modalBackdrop}
-              activeOpacity={1}
-              onPress={() => {
-                setShowDisputeModal(false);
-                setDisputePrice('');
-              }}
-            />
-            <View style={styles.modalSheet}>
-              <View style={styles.modalHandle} />
-              <Text style={styles.modalTitle}>실제 가격 입력</Text>
-              <Text style={styles.modalSubtitle}>
-                현재 표시된 가격이 다르다면 실제 확인한 가격을 입력해 주세요.
-              </Text>
-              <TextInput
-                style={styles.disputeInput}
-                placeholder="실제 가격 (원)"
-                placeholderTextColor={colors.gray400}
-                keyboardType="number-pad"
-                value={disputePrice}
-                onChangeText={setDisputePrice}
-                autoFocus
-                accessibilityLabel="실제 가격 입력"
-              />
-              <View style={styles.modalButtonRow}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  onPress={() => {
-                    setShowDisputeModal(false);
-                    setDisputePrice('');
-                  }}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="취소"
-                >
-                  <Text style={styles.modalCancelButtonText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    styles.modalSubmitButton,
-                    (!disputePrice.trim() || isNaN(parseInt(disputePrice, 10))) && styles.modalButtonDisabled,
-                  ]}
-                  onPress={handleDisputeSubmit}
-                  disabled={!disputePrice.trim() || isNaN(parseInt(disputePrice, 10))}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="이의 제기 제출"
-                >
-                  <Text style={styles.modalSubmitButtonText}>제출</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
 
         {/* 공유하기 버튼 */}
         <TouchableOpacity
@@ -448,6 +395,76 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* 달라요 모달 */}
+      <Modal
+        visible={showDisputeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowDisputeModal(false);
+          setDisputePrice('');
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              setShowDisputeModal(false);
+              setDisputePrice('');
+            }}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>실제 가격 입력</Text>
+            <Text style={styles.modalSubtitle}>
+              현재 표시된 가격이 다르다면 실제 확인한 가격을 입력해 주세요.
+            </Text>
+            <TextInput
+              style={styles.disputeInput}
+              placeholder="실제 가격 (원)"
+              placeholderTextColor={colors.gray400}
+              keyboardType="number-pad"
+              value={disputePrice}
+              onChangeText={setDisputePrice}
+              autoFocus
+              accessibilityLabel="실제 가격 입력"
+            />
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  setShowDisputeModal(false);
+                  setDisputePrice('');
+                }}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="취소"
+              >
+                <Text style={styles.modalCancelButtonText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalSubmitButton,
+                  (!disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())) && styles.modalButtonDisabled,
+                ]}
+                onPress={handleDisputeSubmit}
+                disabled={!disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="이의 제기 제출"
+              >
+                <Text style={styles.modalSubmitButtonText}>제출</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };

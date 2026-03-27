@@ -57,7 +57,7 @@ const ICON_SIZE = 48;
 const ICON_BOX = 56;
 const ICON_RADIUS = 16;
 
-const requestAndroidSystemPermission = async (config: PermissionConfig): Promise<void> => {
+const requestAndroidSystemPermission = async (config: PermissionConfig): Promise<boolean> => {
   const permission =
     config.key === 'location'
       ? PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
@@ -82,7 +82,10 @@ const requestAndroidSystemPermission = async (config: PermissionConfig): Promise
         ],
       );
     });
+    return false;
   }
+
+  return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
 const PermissionScreen: React.FC = () => {
@@ -96,7 +99,7 @@ const PermissionScreen: React.FC = () => {
   });
 
   const handleAllow = useCallback(async () => {
-    const newStatuses: Record<string, boolean> = { ...permissionStatuses };
+    const newStatuses: Record<string, boolean> = { location: false, camera: false, notification: false };
 
     for (const p of PERMISSION_LIST) {
       if (p.key === 'notification') {
@@ -114,8 +117,8 @@ const PermissionScreen: React.FC = () => {
         }
       } else if (Platform.OS === 'android') {
         try {
-          await requestAndroidSystemPermission(p);
-          newStatuses[p.key] = true;
+          const granted = await requestAndroidSystemPermission(p);
+          newStatuses[p.key] = granted;
         } catch {
           newStatuses[p.key] = false;
         }
@@ -125,7 +128,7 @@ const PermissionScreen: React.FC = () => {
     setPermissionStatuses(newStatuses);
     // iOS 위치/카메라: 각 기능 첫 사용 시 시스템이 직접 요청
     markOnboardingSeen();
-  }, [markOnboardingSeen, permissionStatuses, setAllNotifications]);
+  }, [markOnboardingSeen, setAllNotifications]);
 
   return (
     <View style={styles.container}>

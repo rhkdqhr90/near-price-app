@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import messaging from '@react-native-firebase/messaging';
 import { Alert } from 'react-native';
 import { useAuthStore } from '../store/authStore';
@@ -22,8 +22,12 @@ export const useFCM = () => {
     }
   }, [user?.id]);
 
+  const isMountedRef = useRef(false);
+
   useEffect(() => {
     if (!user?.id) return;
+    isMountedRef.current = true;
+    let cleanupFn: (() => void) | undefined;
 
     const setup = async () => {
       // 1. OS 알림 권한 확인/요청
@@ -34,8 +38,10 @@ export const useFCM = () => {
 
       // OS 권한 상태를 store에 반영 (권한 거부 시 앱 내 알림도 OFF)
       if (!enabled) {
-        setAllNotifications(false);
-        return;
+        if (isMountedRef.current) {
+          setAllNotifications(false);
+        }
+        return undefined;
       }
 
       // 2. FCM 토큰 가져오기 & 서버 저장
@@ -48,11 +54,13 @@ export const useFCM = () => {
 
       // 3. 토큰 갱신
       const unsubToken = messaging().onTokenRefresh(async (newToken) => {
+        if (!isMountedRef.current) return;
         await saveFcmToken(newToken);
       });
 
-      // 4. 포그라운드 알림
+      // 4. 포그라운드 알림 — 언마운트 후 Alert 호출 방지
       const unsubMessage = messaging().onMessage(async (remoteMessage) => {
+        if (!isMountedRef.current) return;
         const title = remoteMessage.notification?.title ?? '알림';
         const body = remoteMessage.notification?.body ?? '';
         Alert.alert(title, body);
@@ -64,9 +72,20 @@ export const useFCM = () => {
       };
     };
 
-    let cleanup: (() => void) | undefined;
-    setup().then((fn) => { cleanup = fn; });
+    setup().then((fn) => {
+      if (!isMountedRef.current) {
+        // 언마운트 후 setup 완료 — 리스너 즉시 정리
+        fn?.();
+      } else {
+        cleanupFn = fn;
+      }
+    }).catch(() => {
+      // setup 자체 실패 — 앱 동작에 영향 없음
+    });
 
-    return () => { cleanup?.(); };
+    return () => {
+      isMountedRef.current = false;
+      cleanupFn?.();
+    };
   }, [user?.id, saveFcmToken, setAllNotifications]);
 };

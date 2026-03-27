@@ -40,10 +40,13 @@ const LABEL_RIGHT_LAST = PADDING_RIGHT - 20;
 const PriceTrendChart: React.FC<Props> = ({ prices }) => {
   // 등록 날짜 기준으로 정렬
   const sortedPrices = useMemo(() => {
-    if (prices.length < 2) {
+    const valid = prices.filter(
+      (p) => typeof p.price === 'number' && isFinite(p.price) && p.price >= 0,
+    );
+    if (valid.length < 2) {
       return [];
     }
-    return [...prices].sort((a, b) => {
+    return [...valid].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
       return dateA - dateB;

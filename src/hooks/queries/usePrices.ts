@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey } from '@tanstack/react-query';
 import { priceApi } from '../../api/price.api';
 import type { PaginatedResponse, PriceResponse, ProductPriceCard } from '../../types/api.types';
 
@@ -37,9 +38,15 @@ export const useProductPricesByName = (productName: string) => {
 };
 
 export const useInfiniteRecentPrices = () => {
-  return useInfiniteQuery<PaginatedResponse<ProductPriceCard>>({
+  return useInfiniteQuery<
+    PaginatedResponse<ProductPriceCard>,
+    Error,
+    InfiniteData<PaginatedResponse<ProductPriceCard>>,
+    QueryKey,
+    number
+  >({
     queryKey: priceKeys.recent,
-    queryFn: ({ pageParam }) => priceApi.getRecent(pageParam as number, 20).then(res => res.data),
+    queryFn: ({ pageParam }) => priceApi.getRecent(pageParam, 20).then(res => res.data),
     getNextPageParam: (lastPage) =>
       lastPage.data.length === lastPage.limit ? lastPage.page + 1 : undefined,
     initialPageParam: 1,

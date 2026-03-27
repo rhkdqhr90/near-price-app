@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Image,
   StyleSheet, Alert, InteractionManager, type ListRenderItemInfo,
@@ -65,7 +65,8 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
           };
           await priceApi.create(dto);
           succeededIndicesRef.current.push(i);
-        } catch {
+        } catch (e) {
+          if (__DEV__) console.error('[ConfirmScreen] 가격 등록 실패:', e);
           failedCount += 1;
         }
       }
@@ -91,6 +92,15 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
       showToast('일부 항목 등록에 실패했어요. 전체 등록을 다시 눌러주세요.', 'error');
     },
   });
+
+  // 등록 진행 중 뒤로가기 차단 — 재마운트 후 부분 성공 항목 재등록 방지
+  useEffect(() => {
+    if (!isPending) return;
+    return navigation.addListener('beforeRemove', (e) => {
+      e.preventDefault();
+      Alert.alert('등록 중', '가격 등록이 진행 중입니다. 잠시만 기다려주세요.');
+    });
+  }, [navigation, isPending]);
 
   const handleDelete = useCallback((index: number) => {
     Alert.alert('삭제', '이 항목을 삭제할까요?', [
@@ -165,7 +175,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(item, index) => item.key ?? String(index)}
+          keyExtractor={(item) => item.key}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

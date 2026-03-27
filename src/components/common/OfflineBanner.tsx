@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetworkStore } from '../../store/networkStore';
@@ -10,11 +10,15 @@ import { typography } from '../../theme/typography';
 const OfflineBanner: React.FC = () => {
   const isOffline = useNetworkStore((s) => s.isOffline);
   const insets = useSafeAreaInsets();
+  const paddingStyle = useMemo(
+    () => ({ paddingTop: insets.top + spacing.xs }),
+    [insets.top],
+  );
 
   if (!isOffline) return null;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + spacing.xs }]} accessible={true} accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel="네트워크 연결이 끊어졌어요">
+    <View style={[styles.container, paddingStyle]} accessible={true} accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel="네트워크 연결이 끊어졌어요">
       <WifiOffIcon size={16} color={colors.white} />
       <Text style={styles.text}>네트워크 연결이 끊어졌어요</Text>
     </View>

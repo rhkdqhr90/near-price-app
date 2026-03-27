@@ -34,7 +34,7 @@ const _showNext = (set: (partial: Partial<ToastState> | ((s: ToastState) => Part
       set({ visible: false });
       _timer = null;
       // 약간의 딜레이 후 다음 토스트 표시 (애니메이션 겹침 방지)
-      setTimeout(() => _showNext(set), 200);
+      _timer = setTimeout(() => _showNext(set), 200);
     }, 2000);
     return {
       visible: true,
@@ -81,7 +81,7 @@ export const useToastStore = create<ToastState>((set) => ({
       _timer = setTimeout(() => {
         set({ visible: false });
         _timer = null;
-        setTimeout(() => _showNext(set), 200);
+        _timer = setTimeout(() => _showNext(set), 200);
       }, 2000);
 
       return { visible: true, message, type };
@@ -94,6 +94,6 @@ export const useToastStore = create<ToastState>((set) => ({
     }
     set({ visible: false });
     // 숨긴 후 큐에 남은 것 처리
-    setTimeout(() => _showNext(set), 200);
+    _timer = setTimeout(() => _showNext(set), 200);
   },
 }));

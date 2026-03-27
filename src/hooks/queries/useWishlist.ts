@@ -2,15 +2,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { wishlistApi } from '../../api/wishlist.api';
 import type { WishlistResponse } from '../../types/api.types';
 import { useToastStore } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
 
 export const wishlistKeys = {
   mine: ['wishlists', 'me'] as const,
 };
 
 export const useMyWishlist = () => {
+  const isLoggedIn = useAuthStore((s) => !!s.accessToken);
   return useQuery<WishlistResponse>({
     queryKey: wishlistKeys.mine,
     queryFn: () => wishlistApi.getMyList().then(res => res.data),
+    enabled: isLoggedIn,
   });
 };
 

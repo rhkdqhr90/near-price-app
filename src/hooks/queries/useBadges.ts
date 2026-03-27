@@ -6,19 +6,13 @@ import type { UserBadgesResponse, UserTrustScoreResponse } from '../../types/api
 export const useUserBadges = (userId: string | undefined) =>
   useQuery<UserBadgesResponse>({
     queryKey: ['badges', userId],
-    queryFn: () => {
-      if (!userId) throw new Error('userId is required');
-      return badgeApi.getUserBadges(userId).then(r => r.data);
-    },
+    queryFn: () => badgeApi.getUserBadges(userId as string).then(r => r.data),
     enabled: !!userId,
   });
 
 export const useUserTrustScore = (userId: string | undefined) =>
   useQuery<UserTrustScoreResponse>({
     queryKey: ['trustScore', userId],
-    queryFn: () => {
-      if (!userId) throw new Error('userId is required');
-      return trustScoreApi.getUserTrustScore(userId).then(r => r.data);
-    },
+    queryFn: () => trustScoreApi.getUserTrustScore(userId as string).then(r => r.data),
     enabled: !!userId,
   });

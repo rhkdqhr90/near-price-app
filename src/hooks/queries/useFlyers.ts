@@ -19,7 +19,7 @@ export const useFlyerDetail = (id: string) => {
   return useQuery<FlyerResponse>({
     queryKey: flyerKeys.detail(id),
     queryFn: () => flyerApi.getOne(id).then(res => res.data),
-    enabled: id.length > 0,
+    enabled: !!id,
   });
 };
 
