@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { UnitType } from '../types/api.types';
 
 export interface ConfirmItem {
-  key?: string;
+  key: string;
   productId?: string;
   productName: string;
   price: number;
@@ -48,8 +48,8 @@ interface PriceRegisterState {
 
   // 기존 액션
   setStore: (storeId: string, storeName: string) => void;
-  addItem: (item: ConfirmItem) => void;
-  updateItem: (index: number, item: ConfirmItem) => void;
+  addItem: (item: Omit<ConfirmItem, 'key'>) => void;
+  updateItem: (index: number, item: Omit<ConfirmItem, 'key'>) => void;
   removeItem: (index: number) => void;
   reset: () => void;
 
@@ -78,8 +78,9 @@ export const usePriceRegisterStore = create<PriceRegisterState>((set) => ({
   })),
   updateItem: (index, item) =>
     set((state) => {
+      if (index < 0 || index >= state.items.length) return state;
       const items = [...state.items];
-      items[index] = { ...item, key: items[index]?.key };
+      items[index] = { ...item, key: items[index].key };
       return { items, isDirty: true };
     }),
   removeItem: (index) =>

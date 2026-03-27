@@ -1,14 +1,4 @@
-import axios from 'axios';
-import { NAVER_MAP_CLIENT_ID, NAVER_MAP_CLIENT_SECRET, NAVER_MAPS_API_BASE } from '../utils/config';
-
-const naverMapsClient = axios.create({
-  baseURL: NAVER_MAPS_API_BASE,
-  timeout: 10000,
-  headers: {
-    'X-NCP-APIGW-API-KEY-ID': NAVER_MAP_CLIENT_ID,
-    'X-NCP-APIGW-API-KEY': NAVER_MAP_CLIENT_SECRET,
-  },
-});
+import { apiClient } from './client';
 
 export interface NaverRegionResult {
   code: { id: string; type: string; mappingId: string };
@@ -39,32 +29,26 @@ export interface NcpPlaceItem {
   y: string; // latitude
 }
 
+// 백엔드 프록시 응답 타입 (직접 Naver API 호출 아님 — apiClient 사용이 올바름)
+export interface NaverReverseGeocodeResponse {
+  status: { code: number; name: string; message: string };
+  results: NaverRegionResult[];
+}
+
+export interface NaverGeocodeResponse {
+  status: string;
+  meta: { totalCount: number };
+  addresses: NaverGeocodeItem[];
+}
+
 export const naverMapsApi = {
-  // 역지오코딩: 좌표 → 주소
+  // 역지오코딩: 좌표 → 주소 (백엔드 프록시 경유)
   reverseGeocode: (longitude: number, latitude: number) =>
-    naverMapsClient.get<{
-      status: { code: number; name: string; message: string };
-      results: NaverRegionResult[];
-    }>(
-      '/map-reversegeocode/v2/gc',
-      { params: { coords: `${longitude},${latitude}`, output: 'json', orders: 'admcode' } },
-    ),
+    apiClient.get<NaverReverseGeocodeResponse>('/naver/reverse-geocode', {
+      params: { lat: latitude, lng: longitude },
+    }),
 
-  // 지오코딩: 주소 텍스트 → 좌표
+  // 지오코딩: 주소 텍스트 → 좌표 (백엔드 프록시 경유)
   geocode: (query: string) =>
-    naverMapsClient.get<{
-      status: string;
-      meta: { totalCount: number };
-      addresses: NaverGeocodeItem[];
-    }>(
-      '/map-geocode/v2/geocode',
-      { params: { query } },
-    ),
-
-  // 장소 검색: 키워드 → 주변 매장 목록 (NCP Map Place API)
-  placeSearch: (query: string, lng: number, lat: number) =>
-    naverMapsClient.get<{ status: string; places?: NcpPlaceItem[] }>(
-      '/map-place/v1/search',
-      { params: { query, coordinate: `${lng},${lat}`, radius: 5000, language: 'ko' } },
-    ),
+    apiClient.get<NaverGeocodeResponse>('/naver/geocode', { params: { query } }),
 };

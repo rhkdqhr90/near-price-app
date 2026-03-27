@@ -1,9 +1,5 @@
 import { apiClient } from './client';
-import type { ReactionResponse } from '../types/api.types';
-
-interface CreateReportDto {
-  reason: string;
-}
+import type { ReactionResponse, CreateReportDto } from '../types/api.types';
 
 export const reactionApi = {
   confirm: (priceId: string) =>

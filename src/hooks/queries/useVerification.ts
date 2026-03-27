@@ -5,6 +5,7 @@ import type {
   VerificationListResponse,
   MyVerificationsResponse,
   CreateVerificationDto,
+  VerificationResponse,
 } from '../../types/api.types';
 
 export const verificationKeys = {
@@ -37,7 +38,7 @@ export const useMyVerifications = () =>
  */
 export const useVerifyPrice = (priceId: string) => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<VerificationResponse, Error, CreateVerificationDto>({
     mutationFn: (dto: CreateVerificationDto) =>
       verificationApi.createVerification(priceId, dto).then((res) => res.data),
     onSuccess: () => {

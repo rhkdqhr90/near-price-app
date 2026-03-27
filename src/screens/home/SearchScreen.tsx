@@ -105,7 +105,7 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
     inputRef.current?.focus();
     void storage.get<string[]>(STORAGE_KEYS.RECENT_SEARCHES).then(saved => {
       if (saved) setRecentSearches(saved);
-    });
+    }).catch(() => {});
     return () => {
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     };

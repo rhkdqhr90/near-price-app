@@ -18,6 +18,6 @@ export const useNoticeDetail = (id: string) => {
   return useQuery<NoticeResponse>({
     queryKey: noticeKeys.detail(id),
     queryFn: () => noticeApi.getById(id).then((res) => res.data),
-    enabled: id.length > 0,
+    enabled: !!id,
   });
 };

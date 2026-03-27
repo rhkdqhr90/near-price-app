@@ -368,15 +368,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 <TagIcon size={26} color={colors.gray400} />
               </View>
             )}
-            <TouchableOpacity
+            <Pressable
               style={styles.heartBtn}
-              onPress={() => addWishlist(item.productId)}
-              activeOpacity={0.8}
+              onPress={(e) => {
+                e.stopPropagation();
+                addWishlist(item.productId);
+              }}
               accessibilityRole="button"
               accessibilityLabel={`${item.productName} 찜하기`}
             >
               <HeartIcon size={14} color={colors.white} />
-            </TouchableOpacity>
+            </Pressable>
             {dist !== '-' && (
               <View style={styles.distanceBadge}>
                 <Text style={styles.distanceBadgeText}>{dist}</Text>

@@ -44,8 +44,7 @@ export const useStoreTypes = () => {
         } else {
           setStoreTypes(DEFAULT_STORE_TYPES);
         }
-      } catch (error) {
-        if (__DEV__) { console.error('Failed to load store types:', error); }
+      } catch {
         setStoreTypes(DEFAULT_STORE_TYPES);
       } finally {
         setIsLoading(false);
@@ -83,8 +82,7 @@ export const useStoreTypes = () => {
       // 상태 업데이트
       setStoreTypes(prev => [...prev, newType]);
       return true;
-    } catch (error) {
-      if (__DEV__) { console.error('Failed to add store type:', error); }
+    } catch {
       return false;
     }
   }, [storeTypes]);
@@ -108,8 +106,7 @@ export const useStoreTypes = () => {
       // 상태 업데이트
       setStoreTypes(prev => prev.filter(st => st.value !== value));
       return true;
-    } catch (error) {
-      if (__DEV__) { console.error('Failed to remove store type:', error); }
+    } catch {
       return false;
     }
   }, []);

@@ -15,7 +15,7 @@ const HighlightText: React.FC<Props> = ({
   baseStyle,
   highlightColor = colors.primary,
 }) => {
-  const parts = parseHighlight(text);
+  const parts = parseHighlight(text ?? '');
 
   return (
     <Text style={baseStyle}>

@@ -238,9 +238,9 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
   const renderSummaryHeader = useCallback(() => {
     if (!priceStats) return null;
     const { sortedPrices, heroImageUrl, category, allPrices } = priceStats;
-    const first = sortedPrices[0] ?? null;
-    const second = sortedPrices[1] ?? null;
-    const third = sortedPrices[2] ?? null;
+    const first = sortedPrices[0];
+    const second: PriceResponse | undefined = sortedPrices[1];
+    const third: PriceResponse | undefined = sortedPrices[2];
 
     const firstDistText = first ? getDistText(first.store, latitude, longitude) : null;
     const secondDistText = second ? getDistText(second.store, latitude, longitude) : null;
@@ -322,7 +322,7 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         {/* 2, 3위 그리드 */}
-        {(second !== null || third !== null) && (
+        {(second !== undefined || third !== undefined) && (
           <View style={styles.rankGrid}>
             {second && (
               <TouchableOpacity

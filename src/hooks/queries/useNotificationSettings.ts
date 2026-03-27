@@ -12,7 +12,7 @@ export const useNotificationSettingsQuery = (userId: string | undefined) => {
 
   const query = useQuery({
     queryKey: notificationSettingsKeys.settings(userId ?? ''),
-    queryFn: () => userApi.getUser(userId!),
+    queryFn: () => userApi.getUser(userId ?? ''),
     enabled: !!userId,
     staleTime: 5 * 60 * 1000, // 5분
     select: (data) => ({
@@ -34,8 +34,10 @@ export const useUpdateNotificationSettings = (userId: string | undefined) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (settings: { notifPriceChange?: boolean; notifPromotion?: boolean }) =>
-      userApi.updateNotificationSettings(userId!, settings),
+    mutationFn: (settings: { notifPriceChange?: boolean; notifPromotion?: boolean }) => {
+      if (!userId) return Promise.reject(new Error('userId is required'));
+      return userApi.updateNotificationSettings(userId, settings);
+    },
     onSuccess: () => {
       if (userId) {
         queryClient.invalidateQueries({

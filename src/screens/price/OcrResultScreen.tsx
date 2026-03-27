@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
-  StyleSheet,
+  StyleSheet, Platform,
 } from 'react-native';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import type { PriceRegisterScreenProps } from '../../navigation/types';
@@ -14,6 +14,16 @@ import { typography } from '../../theme/typography';
 type Props = PriceRegisterScreenProps<'OcrResult'>;
 
 interface OcrItem { name: string; price: string; }
+
+const normalizeImageUri = (uri: string): string => {
+  if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http')) {
+    return uri;
+  }
+  if (Platform.OS === 'ios') {
+    return `file://${uri}`;
+  }
+  return uri;
+};
 
 const parseOcrText = (text: string): OcrItem[] => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -55,7 +65,7 @@ const OcrResultScreen: React.FC<Props> = ({ navigation, route }) => {
     setOcrItems([]);
     (async () => {
       try {
-        const result = await TextRecognition.recognize(imageUri);
+        const result = await TextRecognition.recognize(normalizeImageUri(imageUri));
         if (cancelled) return;
         setRawText(result.text);
         setOcrItems(parseOcrText(result.text));
@@ -89,7 +99,7 @@ const OcrResultScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Image source={{ uri: imageUri }} style={styles.image} resizeMode="contain" accessibilityRole="image" accessibilityLabel="촬영한 가격표 이미지" />
+      <Image source={{ uri: normalizeImageUri(imageUri) }} style={styles.image} resizeMode="contain" accessibilityRole="image" accessibilityLabel="촬영한 가격표 이미지" />
 
       <ScrollView style={styles.resultScroll} contentContainerStyle={styles.resultSection}>
         <Text style={styles.sectionTitle}>인식된 가격 항목</Text>

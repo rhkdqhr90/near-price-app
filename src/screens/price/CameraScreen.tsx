@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Linking } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +20,14 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const handleRequestPermission = useCallback(async () => {
     const granted = await requestPermission();
     if (!granted) {
-      Alert.alert('카메라 권한 필요', '설정에서 카메라 접근 권한을 허용해주세요.');
+      Alert.alert(
+        '카메라 권한이 필요합니다',
+        '설정에서 허용해주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '설정으로 이동', onPress: () => Linking.openSettings() },
+        ],
+      );
     }
   }, [requestPermission]);
 

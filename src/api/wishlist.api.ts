@@ -6,8 +6,8 @@ export const wishlistApi = {
     apiClient.get<WishlistResponse>('/wishlists/me'),
 
   add: (productId: string) =>
-    apiClient.post('/wishlists', { productId }),
+    apiClient.post<void>('/wishlists', { productId }),
 
   remove: (productId: string) =>
-    apiClient.delete(`/wishlists/${productId}`),
+    apiClient.delete<void>(`/wishlists/${productId}`),
 };

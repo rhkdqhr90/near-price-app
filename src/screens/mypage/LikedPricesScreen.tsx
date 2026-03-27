@@ -27,15 +27,15 @@ const LikedPricesScreen: React.FC<Props> = () => {
     <View style={styles.item}>
       <View style={styles.itemLeft}>
         <Text style={styles.productName} numberOfLines={1}>
-          {item.price.product.name}
+          {item.price?.product?.name ?? '-'}
         </Text>
         <Text style={styles.storeName} numberOfLines={1}>
-          {item.price.store.name}
+          {item.price?.store?.name ?? '매장 정보 없음'}
         </Text>
         <Text style={styles.timeText}>{formatRelativeTime(item.createdAt)}</Text>
       </View>
       <View style={styles.itemRight}>
-        <Text style={styles.priceText}>{formatPrice(item.price.price)}</Text>
+        <Text style={styles.priceText}>{formatPrice(item.price?.price)}</Text>
         <View style={[
           styles.resultBadge,
           item.result === 'confirmed' ? styles.resultConfirmed : styles.resultDisputed,

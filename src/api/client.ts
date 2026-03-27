@@ -3,12 +3,13 @@ import { useAuthStore } from '../store/authStore';
 import { useNetworkStore } from '../store/networkStore';
 import { API_BASE_URL } from '../utils/config';
 import { queryClient } from '../lib/queryClient';
+import { AUTH_ENDPOINTS } from './constants';
 
 interface RetryConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
-export { isAxiosError } from 'axios';
+export { isAxiosError, isCancel } from 'axios';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -76,6 +77,7 @@ apiClient.interceptors.response.use(
       const { refreshToken, setTokens, logout } = useAuthStore.getState();
 
       if (!refreshToken) {
+        queryClient.clear();
         logout();
         return Promise.reject(error);
       }
@@ -84,18 +86,19 @@ apiClient.interceptors.response.use(
         const res = await axios.post<{
           accessToken: string;
           refreshToken: string;
-        }>(`${API_BASE_URL}/auth/refresh`, { refreshToken });
+        }>(`${API_BASE_URL}${AUTH_ENDPOINTS.REFRESH}`, { refreshToken }, { timeout: 10000 });
         const { accessToken: newAccess, refreshToken: newRefresh } = res.data;
         setTokens(newAccess, newRefresh);
+        isRefreshing = false;
         processQueue(null, newAccess);
         // 토큰 갱신 성공 후 UI가 stale 데이터를 유지하지 않도록 전체 캐시 무효화
         void queryClient.invalidateQueries({});
-        isRefreshing = false;
         config.headers.Authorization = `Bearer ${newAccess}`;
         return apiClient(config);
       } catch (err) {
-        processQueue(err, null);
         isRefreshing = false;
+        processQueue(err, null);
+        queryClient.clear();
         logout();
         return Promise.reject(err);
       }

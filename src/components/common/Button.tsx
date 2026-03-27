@@ -45,7 +45,7 @@ const Button: React.FC<Props> = ({
         activeOpacity={0.85}
         style={[styles.touchable, fullWidth && styles.fullWidth, style]}
         accessibilityRole="button"
-        accessibilityState={{ disabled: isDisabled }}
+        accessibilityState={{ disabled: isDisabled, busy: loading }}
         accessibilityLabel={label}
       >
         <LinearGradient
@@ -74,7 +74,7 @@ const Button: React.FC<Props> = ({
       disabled={isDisabled}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityState={{ disabled: isDisabled }}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       accessibilityLabel={label}
     >
       {content}

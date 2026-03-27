@@ -14,7 +14,7 @@ const ErrorView: React.FC<Props> = ({
   onRetry,
 }) => {
   return (
-    <View style={styles.container} accessible={true} accessibilityLabel={message}>
+    <View style={styles.container}>
       <Text style={styles.message}>{message}</Text>
       {onRetry ? (
         <TouchableOpacity style={styles.button} onPress={onRetry} accessibilityRole="button" accessibilityLabel="다시 시도">
