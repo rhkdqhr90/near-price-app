@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,19 @@ import {
   ScrollView,
   StyleSheet,
   RefreshControl,
-  Alert,
+  ActivityIndicator,
   type ListRenderItemInfo,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { HomeScreenProps } from '../../navigation/types';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { HomeScreenProps, MainTabParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { useRecentPrices } from '../../hooks/queries/usePrices';
+import { useInfiniteRecentPrices } from '../../hooks/queries/usePrices';
+import { useFlyers } from '../../hooks/queries/useFlyers';
+import { useAddWishlist } from '../../hooks/queries/useWishlist';
 import { useLocationStore } from '../../store/locationStore';
 import EmptyState from '../../components/common/EmptyState';
 import SkeletonCard from '../../components/common/SkeletonCard';
@@ -25,120 +29,91 @@ import TagIcon from '../../components/icons/TagIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
 import SearchIcon from '../../components/icons/SearchIcon';
 import BellIcon from '../../components/icons/BellIcon';
+import MapPinIcon from '../../components/icons/MapPinIcon';
+import HeartIcon from '../../components/icons/HeartIcon';
 import ChevronDownIcon from '../../components/icons/ChevronDownIcon';
 import StoreIcon from '../../components/icons/StoreIcon';
-import type { PriceResponse } from '../../types/api.types';
-import { formatPrice, formatRelativeTime, getDistanceM, formatDistance } from '../../utils/format';
-import { POPULAR_TAGS, AD_BANNER_PLACEHOLDER } from '../../utils/constants';
-import { API_BASE_URL } from '../../utils/config';
+import type { ProductPriceCard } from '../../types/api.types';
+import { formatPrice, getDistanceM, formatDistance, fixImageUrl } from '../../utils/format';
+import { POPULAR_TAGS } from '../../utils/constants';
 
 type Props = HomeScreenProps<'Home'>;
 
+const GRID_GAP = spacing.sm;
+const GRID_PADDING = spacing.lg;
 
-// 최근 가격을 상품별로 그룹화하여 카드 데이터 생성
-interface PriceCardData {
-  productId: string;
-  productName: string;
-  unitType: string;
-  storeName: string;
-  distance: string;
-  time: string;
-  minPrice: number;
-  maxPrice: number;
-  storeCount: number;
-  hasClosingDiscount: boolean;
-  imageUrl: string | null;
-  quantity: number | null;
-  registrantNickname: string | null;
-  registrantProfileImage: string | null;
-}
 
-const groupPricesByProduct = (
-  prices: PriceResponse[],
-  userLat?: number,
-  userLng?: number,
-): PriceCardData[] => {
-  // 상품 이름 기준으로 그룹화 (같은 이름이면 같은 카드로 묶임)
-  const map = new Map<string, PriceResponse[]>();
-  prices.forEach((p) => {
-    if (!p.product?.name) return; // product가 없으면 스킵
-    const key = p.product.name.trim().toLowerCase();
-    const group = map.get(key) ?? [];
-    group.push(p);
-    map.set(key, group);
-  });
-
-  return Array.from(map.values()).map((group) => {
-    const sorted = [...group].sort((a, b) => a.price - b.price);
-    const cheapest = sorted[0];
-    const pricelist = sorted.map((p) => p.price);
-    const distanceText =
-      userLat != null &&
-      userLng != null &&
-      cheapest.store?.latitude != null &&
-      cheapest.store?.longitude != null
-        ? formatDistance(getDistanceM(userLat, userLng, cheapest.store.latitude, cheapest.store.longitude))
-        : '-';
-    return {
-      productId: cheapest.product?.id ?? '',
-      productName: cheapest.product?.name ?? '알 수 없음',
-      unitType: cheapest.product?.unitType ?? 'other',
-      storeName: cheapest.store?.name ?? '매장 정보 없음',
-      distance: distanceText,
-      time: formatRelativeTime(cheapest.createdAt),
-      minPrice: Math.min(...pricelist),
-      maxPrice: Math.max(...pricelist),
-      storeCount: group.length,
-      hasClosingDiscount: group.some(
-        (p) => p.condition != null && p.condition.includes('마감'),
-      ),
-      imageUrl: cheapest.imageUrl || null,
-      quantity: cheapest.quantity,
-      registrantNickname: cheapest.user?.nickname || null,
-      registrantProfileImage: cheapest.user?.profileImageUrl || null,
-    };
-  });
-};
+const FLYER_GRAD_COLORS: Array<[string, string]> = [
+  [colors.accent, colors.primary],
+  [colors.olive, colors.oliveDark],
+  [colors.midnightMint, colors.midnightMintDark],
+];
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const regionName = useLocationStore((s) => s.regionName) ?? '내 동네';
+  const rawRegionName = useLocationStore((s) => s.regionName);
+  const regionName = rawRegionName ?? '내 동네';
+  const isRegionNameMissing = rawRegionName === null;
   const userLat = useLocationStore((s) => s.latitude);
   const userLng = useLocationStore((s) => s.longitude);
+  const radius = useLocationStore((s) => s.radius);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const listRef = useRef<FlatList>(null);
+  const { mutate: addWishlist } = useAddWishlist();
+  const { data: flyersData } = useFlyers();
+
+  const radiusLabel = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const {
-    data: recentPrices,
+    data: recentData,
     isLoading: isRecentLoading,
     isError: isRecentError,
     refetch: refetchRecent,
-  } = useRecentPrices();
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteRecentPrices();
 
-  const radius = useLocationStore((s) => s.radius);
+  const recentPrices = useMemo(
+    () => recentData?.pages.flatMap(p => p.data) ?? [],
+    [recentData],
+  );
 
-  // 설정된 동네 기준으로 반경 내 가격만 필터링
   const nearbyPrices = useMemo(() => {
-    if (!recentPrices) return [];
-    if (userLat == null || userLng == null) return recentPrices;
-    return recentPrices.filter((p) => {
-      if (!p.store || p.store.latitude == null || p.store.longitude == null) return true;
-      if (isNaN(p.store.latitude) || isNaN(p.store.longitude)) return true;
-      const dist = getDistanceM(userLat, userLng, p.store.latitude, p.store.longitude);
+    if (recentPrices.length === 0) return [];
+
+    // 필수 데이터 누락 아이템 제외 — 빈 카드 방지
+    const validPrices = recentPrices.filter(
+      (p) => p.productName && p.minPrice != null && p.cheapestStore != null,
+    );
+
+    if (userLat == null || userLng == null) return validPrices;
+    return validPrices.filter((p) => {
+      const lat = p.cheapestStore?.latitude;
+      const lng = p.cheapestStore?.longitude;
+      if (lat == null || lng == null) return true;
+      if (isNaN(lat) || isNaN(lng)) return true;
+      const dist = getDistanceM(userLat, userLng, lat, lng);
       return !isNaN(dist) && dist <= radius;
     });
   }, [recentPrices, userLat, userLng, radius]);
 
-  const priceCards = useMemo(
-    () => groupPricesByProduct(nearbyPrices, userLat ?? undefined, userLng ?? undefined),
-    [nearbyPrices, userLat, userLng],
-  );
+  const featuredCard = useMemo(() => nearbyPrices[0] ?? null, [nearbyPrices]);
+  const gridCards = useMemo(() => nearbyPrices.slice(1), [nearbyPrices]);
 
   const handleTagPress = useCallback((tag: string) => {
     navigation.navigate('Search', { initialQuery: tag });
   }, [navigation]);
 
   const handleCardPress = useCallback(
-    (card: PriceCardData) => {
+    (card: ProductPriceCard) => {
       navigation.navigate('PriceCompare', {
         productId: card.productId,
         productName: card.productName,
@@ -149,52 +124,174 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await refetchRecent();
-    setIsRefreshing(false);
+    try {
+      await refetchRecent();
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [refetchRecent]);
 
+  const handleNavigatePriceRegister = useCallback(() => {
+    navigation.getParent()?.navigate('PriceRegisterStack', { screen: 'StoreSelect' });
+  }, [navigation]);
 
-  const ListHeader = useCallback(
-    () => (
+  const featuredImageUri = useMemo(
+    () => (featuredCard ? fixImageUrl(featuredCard.imageUrl) : null),
+    [featuredCard],
+  );
+
+  // useMemo로 JSX element 직접 반환 — useCallback(component) 패턴은 ref 변경 시
+  // FlatList가 ListHeader를 unmount/remount하므로 ReactElement 방식이 안전함
+  const listHeader = useMemo(() => {
+    const featuredDist =
+      featuredCard != null &&
+      userLat != null &&
+      userLng != null &&
+      featuredCard.cheapestStore?.latitude != null &&
+      featuredCard.cheapestStore?.longitude != null
+        ? formatDistance(
+            getDistanceM(
+              userLat,
+              userLng,
+              featuredCard.cheapestStore.latitude,
+              featuredCard.cheapestStore.longitude,
+            ),
+          )
+        : '-';
+    return (
       <>
         {/* 인기 태그 */}
-        <View style={styles.section}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tagsRow}
-          >
-            {POPULAR_TAGS.map((tag) => (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tagsRow}
+        >
+          {POPULAR_TAGS.map((tag, index) => (
+            <TouchableOpacity
+              key={tag}
+              style={[styles.tagChip, index === 0 && styles.tagChipActive]}
+              onPress={() => handleTagPress(tag)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${tag} 태그 검색`}
+            >
+              <Text style={[styles.tagText, index === 0 && styles.tagTextActive]}>{tag}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* 이웃 즐겨찾기 */}
+        {!isRecentLoading && !isRecentError && featuredCard && (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>이웃 즐겨찾기</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.featuredCard, pressed && styles.featuredCardPressed]}
+              onPress={() => handleCardPress(featuredCard)}
+              accessibilityRole="button"
+              accessibilityLabel={`${featuredCard.productName} 이웃 추천 상품`}
+            >
+              <View style={styles.featuredImageWrap}>
+                {featuredImageUri ? (
+                  <Image
+                    source={{ uri: featuredImageUri }}
+                    style={styles.featuredImage}
+                    resizeMode="cover"
+                    accessible={true}
+                    accessibilityLabel={`${featuredCard.productName} 상품 이미지`}
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={[colors.accent, colors.primary]}
+                    style={[styles.featuredImage, styles.featuredImageGradient]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.featuredPlaceholderEmoji}>🛒</Text>
+                  </LinearGradient>
+                )}
+                <View style={styles.featuredOverlay} />
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedBadgeText}>✓ 이웃이 인증한</Text>
+                </View>
+                {featuredCard.hasClosingDiscount && (
+                  <View style={styles.featuredClosingBadge}>
+                    <Text style={styles.featuredClosingBadgeText}>마감할인</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.featuredFooter}>
+                <View style={styles.featuredFooterLeft}>
+                  <Text style={styles.featuredStoreName} numberOfLines={1}>
+                    {featuredCard.cheapestStore?.name || '매장 정보 없음'}
+                  </Text>
+                  <Text style={styles.featuredProductName} numberOfLines={1}>{featuredCard.productName}</Text>
+                </View>
+                <View style={styles.featuredPriceWrap}>
+                  <Text style={styles.featuredPrice}>{formatPrice(featuredCard.minPrice)}</Text>
+                  <Text style={styles.featuredDistance}>{featuredDist}</Text>
+                </View>
+              </View>
+            </Pressable>
+          </>
+        )}
+
+        {/* 오늘의 전단지 */}
+        {flyersData && flyersData.length > 0 && (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>오늘의 전단지</Text>
               <TouchableOpacity
-                key={tag}
-                style={styles.tagChip}
-                onPress={() => handleTagPress(tag)}
+                onPress={() => navigation.getParent()?.navigate('Flyer', { screen: 'FlyerList' })}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={`${tag} 태그 검색`}
+                accessibilityLabel="전단지 전체보기"
               >
-                <Text style={styles.tagText}>{tag}</Text>
+                <Text style={styles.sectionMoreText}>전체보기 →</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.flyerStrip}
+            >
+              {flyersData.slice(0, 5).map((flyer, index) => (
+                <TouchableOpacity
+                  key={flyer.id}
+                  onPress={() => navigation.getParent()?.navigate('Flyer', { screen: 'FlyerList' })}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${flyer.storeName} 전단지 보기`}
+                >
+                  <LinearGradient
+                    colors={FLYER_GRAD_COLORS[index % FLYER_GRAD_COLORS.length]}
+                    style={styles.flyerCard}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <View style={styles.flyerCircle1} />
+                    <View style={styles.flyerCircle2} />
+                    <Text style={styles.flyerEmoji}>{flyer.emoji}</Text>
+                    <Text style={styles.flyerTitle}>{flyer.storeName}</Text>
+                    <Text style={styles.flyerSubtitle}>{flyer.promotionTitle}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {/* 근처 가격 정보 */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>근처 가격 정보</Text>
+          <View style={styles.sectionLiveWrap}>
+            <Text style={styles.sectionLiveDot}>⚡</Text>
+            <Text style={styles.sectionLiveText}>실시간 업데이트</Text>
+          </View>
         </View>
 
-        {/* 광고 배너 */}
-        <View style={styles.adBanner}>
-          <View style={styles.adStoreIcon}>
-            <StoreIcon size={spacing.iconSm} color={colors.adText} />
-          </View>
-          <View style={styles.adContent}>
-            <Text style={styles.adStoreName}>{AD_BANNER_PLACEHOLDER.storeName}</Text>
-            <Text style={styles.adInfo}>{AD_BANNER_PLACEHOLDER.info}</Text>
-          </View>
-          <Text style={styles.adBadge}>AD</Text>
-        </View>
-
-        {/* 섹션 제목 */}
-        <Text style={styles.sectionTitle}>내 동네 실시간 가격</Text>
-
-        {/* 로딩 / 에러 상태 */}
+        {/* 로딩 / 에러 / 빈 상태 */}
         {isRecentLoading && <SkeletonCard variant="price" />}
         {isRecentError && (
           <EmptyState
@@ -204,150 +301,146 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             action={{ label: '다시 시도', onPress: refetchRecent }}
           />
         )}
-        {!isRecentLoading && !isRecentError && priceCards.length === 0 && (
+        {!isRecentLoading && !isRecentError && nearbyPrices.length === 0 && (
           <EmptyState
             icon={TagIcon}
-            title="아직 등록된 가격이 없어요"
-            subtitle="이 동네 첫 가격을 등록해 보세요!"
+            title="아직 우리 동네에 등록된 가격이 없어요"
+            subtitle="첫 번째 가격을 등록하면 동네 사람들에게 도움이 돼요!"
+            action={{
+              label: '가격 등록하기',
+              onPress: handleNavigatePriceRegister,
+            }}
           />
         )}
       </>
-    ),
-    [handleTagPress, isRecentLoading, isRecentError, priceCards.length, refetchRecent],
-  );
+    );
+  }, [
+    handleTagPress,
+    isRecentLoading,
+    isRecentError,
+    nearbyPrices,
+    refetchRecent,
+    navigation,
+    featuredCard,
+    featuredImageUri,
+    handleCardPress,
+    handleNavigatePriceRegister,
+    flyersData,
+    userLat,
+    userLng,
+  ]);
 
-  const listContentStyle = useMemo(
-    () => [
-      styles.listContent,
-      { paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.md },
-    ],
+  const listContentPaddingStyle = useMemo(
+    () => ({ paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.xl }),
     [insets.bottom],
   );
 
-
-  // ─── 이미지 URL 보정 (에뮬레이터 주소 → 실제 서버) ─────────────────────
-  const fixImageUrl = useCallback((url: string | null): string | null => {
-    if (!url || url.length === 0) return null;
-    if (url.startsWith('http')) {
-      return url.replace(/http:\/\/10\.0\.2\.2:\d+/, API_BASE_URL);
-    }
-    return `${API_BASE_URL}/${url}`;
-  }, []);
-
-  // ─── 가격 카드 ─────────────────────────────────────────────────────────
-  const renderPriceCard = useCallback(
-    ({ item }: ListRenderItemInfo<PriceCardData>) => {
+  const renderGridCard = useCallback(
+    ({ item }: ListRenderItemInfo<ProductPriceCard>) => {
       const imageUri = fixImageUrl(item.imageUrl);
-
+      const dist =
+        item.cheapestStore?.latitude != null &&
+        item.cheapestStore?.longitude != null &&
+        userLat != null &&
+        userLng != null
+          ? formatDistance(
+              getDistanceM(userLat, userLng, item.cheapestStore.latitude, item.cheapestStore.longitude),
+            )
+          : '-';
       return (
         <Pressable
-          style={({ pressed }) => [styles.priceCard, pressed && styles.priceCardPressed]}
+          style={({ pressed }) => [styles.gridCard, pressed && styles.gridCardPressed]}
           onPress={() => handleCardPress(item)}
-          android_ripple={{ color: colors.gray200 }}
           accessibilityRole="button"
-          accessibilityLabel={`${item.productName} ${item.minPrice}원`}
+          accessibilityLabel={`${item.productName} ${formatPrice(item.minPrice)}`}
         >
-          {/* 왼쪽: 이미지 썸네일 */}
-          {imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.cardImage}
-              resizeMode="cover"
-              accessible={true}
-              accessibilityLabel={`${item.productName} 상품 이미지`}
-            />
-          ) : (
-            <View style={styles.cardImagePlaceholder} accessible={true} accessibilityLabel="상품 이미지 없음">
-              <TagIcon size={28} color={colors.gray400} />
-            </View>
-          )}
-
-          {/* 오른쪽: 정보 */}
-          <View style={styles.cardContent}>
-            {/* 상품명 + 수량 */}
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardProductName} numberOfLines={1}>
-                {item.productName}
-                {item.quantity ? <Text style={styles.cardQuantity}> {item.quantity}개</Text> : null}
-              </Text>
-              {item.hasClosingDiscount && (
-                <View style={styles.closingBadge}>
-                  <Text style={styles.closingBadgeText}>마감</Text>
-                </View>
-              )}
-            </View>
-
-            {/* 가격 */}
-            <Text style={styles.cardMinPrice}>
-              {formatPrice(item.minPrice)}
-              {item.storeCount > 1 && item.maxPrice > item.minPrice && (
-                <Text style={styles.cardMaxPrice}> ~ {formatPrice(item.maxPrice)}</Text>
-              )}
-            </Text>
-
-            {/* 매장 · 거리 · 시간 */}
-            <Text style={styles.cardMeta} numberOfLines={1}>
-              {item.storeName} · {item.distance} · {item.time}
-            </Text>
-
-            {/* 등록자 닉네임 */}
-            {item.registrantNickname && (
-              <Text style={styles.cardRegistrant} numberOfLines={1}>
-                by {item.registrantNickname}
-              </Text>
+          <View style={styles.gridImageWrap}>
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.gridImage}
+                resizeMode="cover"
+                accessible={true}
+                accessibilityLabel={`${item.productName} 상품 이미지`}
+              />
+            ) : (
+              <View style={styles.gridImagePlaceholder}>
+                <TagIcon size={26} color={colors.gray400} />
+              </View>
             )}
-
-            {/* 비교 */}
-            <Text style={styles.cardCompare}>
-              {item.storeCount}곳 비교 {'>'}
-            </Text>
+            <TouchableOpacity
+              style={styles.heartBtn}
+              onPress={() => addWishlist(item.productId)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.productName} 찜하기`}
+            >
+              <HeartIcon size={14} color={colors.white} />
+            </TouchableOpacity>
+            {dist !== '-' && (
+              <View style={styles.distanceBadge}>
+                <Text style={styles.distanceBadgeText}>{dist}</Text>
+              </View>
+            )}
+            {item.storeCount > 1 && (
+              <View style={styles.storeCountBadge}>
+                <Text style={styles.storeCountBadgeText}>매장 {item.storeCount}곳</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.gridInfo}>
+            {item.hasClosingDiscount && (
+              <View style={styles.closingBadge}>
+                <Text style={styles.closingBadgeText}>마감</Text>
+              </View>
+            )}
+            <Text style={styles.gridProductName} numberOfLines={2}>{item.productName}</Text>
+            <Text style={styles.gridPrice}>{formatPrice(item.minPrice)}</Text>
+            <View style={styles.gridStoreRow}>
+              <StoreIcon size={11} color={colors.gray400} />
+              <Text style={styles.gridStoreName} numberOfLines={1}>
+                {item.cheapestStore?.name || '매장 정보 없음'}
+              </Text>
+            </View>
           </View>
         </Pressable>
       );
     },
-    [handleCardPress, fixImageUrl],
+    [handleCardPress, addWishlist, userLat, userLng],
   );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* ─── 헤더 ────────────────────────────────────────────────────── */}
+      {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.regionButton}
           activeOpacity={0.7}
-          onPress={() => navigation.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
+          onPress={() => navigation.getParent()?.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
           accessibilityRole="button"
           accessibilityLabel={`${regionName} 지역 변경`}
         >
+          <MapPinIcon size={16} color={colors.primary} />
           <Text style={styles.regionText}>{regionName}</Text>
-          <ChevronDownIcon size={14} color={colors.black} />
+          <ChevronDownIcon size={13} color={colors.gray700} />
         </TouchableOpacity>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            activeOpacity={0.7}
-            onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
-            accessibilityRole="button"
-            accessibilityLabel="검색"
-          >
-            <SearchIcon size={22} color={colors.black} />
-          </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <Text style={styles.brandText}>NearPrice</Text>
           <TouchableOpacity
             style={styles.headerIconBtn}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="알림"
-            onPress={() => Alert.alert('알림', '알림 기능이 곧 추가될 예정이에요!')}
+            onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('MyPageStack', {
+              screen: 'NotificationSettings',
+            })}
           >
-            <View>
-              <BellIcon size={22} color={colors.black} />
-              <View style={styles.notifDot} />
-            </View>
+            <BellIcon size={22} color={colors.black} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ─── 검색바 ──────────────────────────────────────────────────── */}
+      {/* 검색바 */}
       <View style={styles.searchBarWrap}>
         <TouchableOpacity
           style={styles.searchBar}
@@ -358,28 +451,50 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           <SearchIcon size={18} color={colors.gray400} />
           <Text style={styles.searchPlaceholder}>상품 이름을 검색하세요</Text>
+          <View style={styles.radiusPill}>
+            <Text style={styles.radiusPillText}>반경 {radiusLabel}</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* ─── 메인 콘텐츠 ─────────────────────────────────────────── */}
-      <FlatList
-          data={priceCards}
-          keyExtractor={(item) => item.productId}
-          renderItem={renderPriceCard}
-          contentContainerStyle={listContentStyle}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-          ListHeaderComponent={ListHeader}
-        />
+      {/* 동네 미설정 배너 */}
+      {isRegionNameMissing && (
+        <TouchableOpacity
+          style={styles.locationBanner}
+          onPress={() => navigation.getParent()?.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="동네 설정하기"
+        >
+          <Text style={styles.locationBannerText}>내 동네를 설정하면 주변 가격을 볼 수 있어요</Text>
+          <Text style={styles.locationBannerAction}>설정하기 →</Text>
+        </TouchableOpacity>
+      )}
 
-      {/* FAB 제거됨 — 등록은 하단 탭의 "등록" 버튼으로 접근 */}
+      {/* 메인 콘텐츠 (2열 그리드) */}
+      <FlatList
+        ref={listRef}
+        data={gridCards}
+        numColumns={2}
+        keyExtractor={(item) => item.productId}
+        renderItem={renderGridCard}
+        columnWrapperStyle={styles.gridRow}
+        contentContainerStyle={[styles.listContent, listContentPaddingStyle]}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator style={styles.footerLoader} color={colors.primary} /> : null}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        ListHeaderComponent={listHeader}
+      />
     </View>
   );
 };
@@ -405,29 +520,25 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   regionText: {
-    ...typography.headingXl,
+    ...typography.headingLg,
+    color: colors.black,
   },
-  headerIcons: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  brandText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: colors.olive,
+    letterSpacing: -0.3,
   },
   headerIconBtn: {
     width: spacing.headerIconSize,
     height: spacing.headerIconSize,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  notifDot: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: spacing.notifDotSize,
-    height: spacing.notifDotSize,
-    borderRadius: spacing.xs,
-    backgroundColor: colors.danger,
-    borderWidth: 1,
-    borderColor: colors.white,
   },
 
   // ─── 검색바 ───────────────────────────────────────────────────────────
@@ -440,7 +551,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.gray100,
-    borderRadius: spacing.radiusMd,
+    borderRadius: spacing.radiusXl,
     paddingHorizontal: spacing.inputPad,
     paddingVertical: spacing.md,
     gap: spacing.sm,
@@ -450,22 +561,54 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.gray400,
   },
+  radiusPill: {
+    backgroundColor: colors.accent,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  radiusPillText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+
+  // ─── 동네 배너 ────────────────────────────────────────────────────────
+  locationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  locationBannerText: {
+    ...typography.bodySm,
+    color: colors.primary,
+    flex: 1,
+  },
+  locationBannerAction: {
+    ...typography.bodySm,
+    fontWeight: '600' as const,
+    color: colors.primary,
+    marginLeft: spacing.sm,
+  },
 
   // ─── 리스트 ────────────────────────────────────────────────────────────
   listContent: {
-    paddingTop: spacing.sm,
-    paddingHorizontal: 0,
-    gap: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  footerLoader: {
+    paddingVertical: spacing.xl,
   },
 
   // ─── 인기 태그 ─────────────────────────────────────────────────────────
-  section: {
-    paddingHorizontal: spacing.lg,
-  },
   tagsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingVertical: spacing.micro,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   tagChip: {
     backgroundColor: colors.white,
@@ -474,187 +617,320 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderWidth: 1,
     borderColor: colors.gray200,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
+  },
+  tagChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tagText: {
     ...typography.tagText,
-    fontWeight: '500' as const,
-  },
-
-  // ─── 광고 배너 ─────────────────────────────────────────────────────────
-  adBanner: {
-    backgroundColor: colors.adBg,
-    borderRadius: spacing.radiusMd,
-    padding: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  adStoreIcon: {
-    width: spacing.headerIconSize,
-    height: spacing.headerIconSize,
-    backgroundColor: colors.white,
-    borderRadius: spacing.radiusMd,
-    borderWidth: 0.5,
-    borderColor: colors.gray200,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  adStoreEmoji: {
-    fontSize: spacing.xxl,
-  },
-  adContent: {
-    flex: 1,
-  },
-  adStoreName: {
-    ...typography.body,
     fontWeight: '600' as const,
-    color: colors.gray900,
-    marginBottom: spacing.micro,
-  },
-  adInfo: {
-    ...typography.bodySm,
     color: colors.gray600,
   },
-  adBadge: {
-    position: 'absolute',
-    top: 10,
-    right: spacing.md,
-    ...typography.captionBold,
-    color: colors.adText,
-  },
-
-  // ─── 섹션 제목 ─────────────────────────────────────────────────────────
-  sectionTitle: {
-    ...typography.headingXl,
+  tagTextActive: {
+    color: colors.white,
     fontWeight: '700' as const,
-    color: colors.black,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-    paddingHorizontal: spacing.lg,
   },
 
-  // ─── 가격 카드 (당근마켓 스타일: 구분선, 그림자 없음, 촘촘) ──────────
-  priceCard: {
-    backgroundColor: colors.white,
-    flexDirection: 'row',
-    borderRadius: spacing.radiusLg,
-    marginBottom: spacing.sm,
-    marginHorizontal: spacing.lg,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-    overflow: 'hidden',
-  },
-  priceCardPressed: {
-    opacity: 0.9,
-  },
-  cardImage: {
-    width: spacing.cardImageSize,
-    height: spacing.cardImageSize,
-    borderRadius: spacing.radiusMd,
-    margin: spacing.md,
-  },
-  cardImagePlaceholder: {
-    width: spacing.cardImageSize,
-    height: spacing.cardImageSize,
-    borderRadius: spacing.radiusMd,
-    margin: spacing.md,
-    backgroundColor: colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardContent: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    justifyContent: 'center',
-  },
-  cardHeader: {
+  // ─── 섹션 헤더 ─────────────────────────────────────────────────────────
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
   },
-  cardProductName: {
-    ...typography.headingLg,
-    flex: 1,
-    marginRight: spacing.sm,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: colors.black,
+    letterSpacing: -0.3,
   },
-  cardQuantity: {
-    ...typography.bodySm,
-    color: colors.gray600,
-    fontWeight: '400' as const,
-  },
-  cardMinPrice: {
-    ...typography.price,
-    marginBottom: 2,
-  },
-  cardMaxPrice: {
-    fontSize: 14,
-    color: colors.gray600,
-    fontWeight: '400' as const,
-  },
-  cardMeta: {
-    ...typography.bodySm,
-    color: colors.gray600,
-    marginBottom: 2,
-  },
-  cardRegistrant: {
-    ...typography.caption,
-    color: colors.gray400,
-    marginBottom: 4,
-    fontStyle: 'italic',
-  },
-  cardCompare: {
-    ...typography.bodySm,
+  sectionMoreText: {
+    fontSize: 12,
     fontWeight: '600' as const,
     color: colors.primary,
   },
-
-  // ─── 마감할인 뱃지 ──────────────────────────────────────────────────────
-  closingBadge: {
-    backgroundColor: colors.dangerLight,
-    borderRadius: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.micro,
+  sectionLiveWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
-  closingBadgeText: {
-    ...typography.caption,
-    fontWeight: '700' as const,
-    color: colors.danger,
+  sectionLiveDot: {
+    fontSize: 14,
+  },
+  sectionLiveText: {
+    fontSize: 11,
+    fontWeight: '800' as const,
+    color: colors.primary,
+    letterSpacing: -0.3,
   },
 
-  // ─── FAB ───────────────────────────────────────────────────────────────
-  fabShadow: {
-    position: 'absolute',
-    right: spacing.fabRight,
-    width: spacing.fabSize,
-    height: spacing.fabSize,
-    borderRadius: spacing.radiusLg,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+  // ─── 이웃 즐겨찾기 (Featured Card) ────────────────────────────────────
+  featuredCard: {
+    marginHorizontal: spacing.lg,
+    borderRadius: spacing.radiusXl,
+    overflow: 'hidden',
+    backgroundColor: colors.white,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
   },
-  fab: {
-    flex: 1,
-    borderRadius: spacing.radiusLg,
-    backgroundColor: colors.black,
-    overflow: 'hidden',
+  featuredCardPressed: {
+    opacity: 0.96,
+    transform: [{ scale: 0.99 }],
   },
-  fabPressable: {
+  featuredImageWrap: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredImageGradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredPlaceholderEmoji: {
+    fontSize: 48,
+  },
+  featuredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.featuredImageOverlay,
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    backgroundColor: colors.olive,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  verifiedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  featuredClosingBadge: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    backgroundColor: colors.danger,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  featuredClosingBadgeText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+  featuredFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  featuredFooterLeft: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  featuredStoreName: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: colors.gray600,
+    marginBottom: spacing.xs,
+  },
+  featuredProductName: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: colors.black,
+  },
+  featuredPriceWrap: {
+    alignItems: 'flex-end',
+  },
+  featuredPrice: {
+    fontSize: 20,
+    fontWeight: '900' as const,
+    color: colors.primary,
+  },
+  featuredDistance: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: colors.gray400,
+    marginTop: spacing.xs,
+  },
+
+  // ─── 전단지 스트립 ─────────────────────────────────────────────────────
+  flyerStrip: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
+  flyerCard: {
+    width: 140,
+    height: 100,
+    borderRadius: spacing.radiusLg,
+    padding: spacing.md,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  flyerCircle1: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.flyerCircleOverlay,
+    top: -20,
+    right: -20,
+  },
+  flyerCircle2: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.flyerCircleOverlayFaint,
+    bottom: 10,
+    right: 30,
+  },
+  flyerEmoji: {
+    fontSize: 20,
+    marginBottom: spacing.xs,
+  },
+  flyerTitle: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: colors.white,
+    marginBottom: spacing.micro,
+  },
+  flyerSubtitle: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: colors.flyerSubtitleText,
+  },
+
+  // ─── 2열 그리드 ────────────────────────────────────────────────────────
+  gridRow: {
+    gap: GRID_GAP,
+    paddingHorizontal: GRID_PADDING,
+    marginBottom: spacing.md,
+  },
+  gridCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusLg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  gridCardPressed: {
+    opacity: 0.97,
+    transform: [{ scale: 0.99 }],
+  },
+  gridImageWrap: {
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: colors.secondaryBg,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridImagePlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  heartBtn: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.heartBtnBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  distanceBadge: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: colors.distanceBadgeBg,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  distanceBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
+  storeCountBadge: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.primaryDark,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  storeCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: colors.white,
+  },
+  gridInfo: {
+    padding: spacing.md,
+  },
+  closingBadge: {
+    backgroundColor: colors.dangerLight,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.micro,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.xs,
+  },
+  closingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: colors.danger,
+  },
+  gridProductName: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: colors.black,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
+  },
+  gridPrice: {
+    fontSize: 16,
+    fontWeight: '900' as const,
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  gridStoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  gridStoreName: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: colors.gray600,
+    flex: 1,
   },
 });
 

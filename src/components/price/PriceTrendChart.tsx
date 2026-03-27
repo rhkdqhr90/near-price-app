@@ -11,6 +11,7 @@ interface Props {
 }
 
 interface ChartData {
+  id: string;
   x: number;
   y: number;
   price: number;
@@ -21,17 +22,25 @@ interface ChartData {
 
 const CHART_WIDTH = Dimensions.get('window').width - spacing.lg * 2;
 const CHART_HEIGHT = 180;
-const PADDING_TOP = 16;
+const PADDING_TOP = spacing.lg;    // 16
 const PADDING_BOTTOM = 30;
 const PADDING_LEFT = 40;
-const PADDING_RIGHT = 16;
+const PADDING_RIGHT = spacing.lg;  // 16
 const POINT_RADIUS = 5;
+const POINT_RADIUS_SM = 3;
 const LABEL_HEIGHT = 24;
+const LABEL_WIDTH = 40;
+
+// X축 레이블 절대 위치 (모듈 상수에서 파생, StyleSheet용)
+const LABEL_LEFT_FIRST = PADDING_LEFT - 20;
+const LABEL_LEFT_MID =
+  PADDING_LEFT + (CHART_WIDTH - PADDING_LEFT - PADDING_RIGHT) / 2 - 20;
+const LABEL_RIGHT_LAST = PADDING_RIGHT - 20;
 
 const PriceTrendChart: React.FC<Props> = ({ prices }) => {
   // 등록 날짜 기준으로 정렬
   const sortedPrices = useMemo(() => {
-    if (!prices || prices.length < 2) {
+    if (prices.length < 2) {
       return [];
     }
     return [...prices].sort((a, b) => {
@@ -52,16 +61,12 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
     return Math.max(...sortedPrices.map((p) => p.price));
   }, [sortedPrices]);
 
-  const priceRange = useMemo(
-    () => (maxPrice - minPrice || 1), // 최저가와 최고가가 같은 경우 처리
-    [minPrice, maxPrice],
-  );
-
   // 차트용 좌표 계산
   const chartData: ChartData[] = useMemo(() => {
     if (sortedPrices.length === 0) {
       return [];
     }
+    const priceRange = maxPrice - minPrice || 1; // 최저가와 최고가가 같은 경우 처리
     const availableWidth = CHART_WIDTH - PADDING_LEFT - PADDING_RIGHT;
     const availableHeight = CHART_HEIGHT - PADDING_TOP - PADDING_BOTTOM;
 
@@ -73,6 +78,7 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
       const isMax = price.price === maxPrice;
 
       return {
+        id: price.id,
         x,
         y,
         price: price.price,
@@ -84,24 +90,30 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
         isMax,
       };
     });
-  }, [sortedPrices, minPrice, maxPrice, priceRange]);
+  }, [sortedPrices, minPrice, maxPrice]);
+
+  // Polyline 포인트 문자열 생성 (hooks는 early return 전에 선언)
+  const polylinePoints = useMemo(
+    () => chartData.map((d) => `${d.x},${d.y}`).join(' '),
+    [chartData],
+  );
+
+  // 그라데이션 아래 영역을 위한 다각형
+  const polygonPoints = useMemo(() => {
+    if (chartData.length < 2) return '';
+    return [
+      { x: chartData[0].x, y: CHART_HEIGHT },
+      ...chartData.map((d) => ({ x: d.x, y: d.y })),
+      { x: chartData[chartData.length - 1].x, y: CHART_HEIGHT },
+    ]
+      .map((p) => `${p.x},${p.y}`)
+      .join(' ');
+  }, [chartData]);
 
   // 2건 미만이면 렌더링하지 않음
   if (chartData.length < 2) {
     return null;
   }
-
-  // Polyline 포인트 문자열 생성
-  const polylinePoints = chartData.map((d) => `${d.x},${d.y}`).join(' ');
-
-  // 그라데이션 아래 영역을 위한 다각형
-  const polygonPoints = [
-    { x: chartData[0].x, y: CHART_HEIGHT },
-    ...chartData.map((d) => ({ x: d.x, y: d.y })),
-    { x: chartData[chartData.length - 1].x, y: CHART_HEIGHT },
-  ]
-    .map((p) => `${p.x},${p.y}`)
-    .join(' ');
 
   return (
     <View style={styles.container}>
@@ -129,15 +141,15 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
           />
 
           {/* 데이터 포인트 */}
-          {chartData.map((data, index) => {
+          {chartData.map((data) => {
             const isSpecial = data.isMin || data.isMax;
             return (
               <Circle
-                key={index}
+                key={data.id}
                 cx={data.x}
                 cy={data.y}
-                r={isSpecial ? POINT_RADIUS : 3}
-                fill={isSpecial ? colors.primary : colors.primary}
+                r={isSpecial ? POINT_RADIUS : POINT_RADIUS_SM}
+                fill={colors.primary}
                 opacity={isSpecial ? 1 : 0.8}
               />
             );
@@ -146,33 +158,16 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
 
         {/* X축 레이블 (첫 번째, 중간, 마지막) */}
         <View style={styles.xAxisLabels}>
-          {chartData.length > 0 && (
-            <Text
-              style={[styles.xAxisLabel, { left: PADDING_LEFT - 20 }]}
-              numberOfLines={1}
-            >
-              {chartData[0].date}
-            </Text>
-          )}
+          <Text style={styles.xAxisLabelFirst} numberOfLines={1}>
+            {chartData[0].date}
+          </Text>
           {chartData.length > 1 && (
-            <Text
-              style={[
-                styles.xAxisLabel,
-                { left: PADDING_LEFT + (CHART_WIDTH - PADDING_LEFT - PADDING_RIGHT) / 2 - 20 },
-              ]}
-              numberOfLines={1}
-            >
+            <Text style={styles.xAxisLabelMid} numberOfLines={1}>
               {chartData[Math.floor(chartData.length / 2)].date}
             </Text>
           )}
           {chartData.length > 2 && (
-            <Text
-              style={[
-                styles.xAxisLabel,
-                { right: PADDING_RIGHT - 20 },
-              ]}
-              numberOfLines={1}
-            >
+            <Text style={styles.xAxisLabelLast} numberOfLines={1}>
               {chartData[chartData.length - 1].date}
             </Text>
           )}
@@ -182,15 +177,15 @@ const PriceTrendChart: React.FC<Props> = ({ prices }) => {
       {/* 최저가/최고가 범례 */}
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+          <View style={styles.legendDotPrimary} />
           <Text style={styles.legendLabel}>
-            최저: {Math.min(...sortedPrices.map((p) => p.price)).toLocaleString()}원
+            최저: {minPrice.toLocaleString()}원
           </Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.gray400 }]} />
+          <View style={styles.legendDotMuted} />
           <Text style={styles.legendLabel}>
-            최고: {Math.max(...sortedPrices.map((p) => p.price)).toLocaleString()}원
+            최고: {maxPrice.toLocaleString()}원
           </Text>
         </View>
       </View>
@@ -209,7 +204,7 @@ const styles = StyleSheet.create({
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: spacing.xs,
     elevation: 1,
   },
   title: {
@@ -229,20 +224,36 @@ const styles = StyleSheet.create({
     width: CHART_WIDTH,
     height: LABEL_HEIGHT,
   },
-  xAxisLabel: {
+  xAxisLabelFirst: {
     position: 'absolute',
     ...typography.caption,
     color: colors.gray400,
-    width: 40,
+    width: LABEL_WIDTH,
     textAlign: 'center',
-    fontSize: 11,
+    left: LABEL_LEFT_FIRST,
+  },
+  xAxisLabelMid: {
+    position: 'absolute',
+    ...typography.caption,
+    color: colors.gray400,
+    width: LABEL_WIDTH,
+    textAlign: 'center',
+    left: LABEL_LEFT_MID,
+  },
+  xAxisLabelLast: {
+    position: 'absolute',
+    ...typography.caption,
+    color: colors.gray400,
+    width: LABEL_WIDTH,
+    textAlign: 'center',
+    right: LABEL_RIGHT_LAST,
   },
   legendContainer: {
     flexDirection: 'row',
     gap: spacing.lg,
     marginTop: spacing.xl,
     paddingTop: spacing.md,
-    borderTopWidth: 1,
+    borderTopWidth: spacing.borderThin,
     borderTopColor: colors.gray100,
   },
   legendItem: {
@@ -250,15 +261,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  legendDotPrimary: {
+    width: spacing.sm,
+    height: spacing.sm,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.primary,
+  },
+  legendDotMuted: {
+    width: spacing.sm,
+    height: spacing.sm,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.gray400,
   },
   legendLabel: {
     ...typography.caption,
     color: colors.gray700,
-    fontSize: 12,
   },
 });
 

@@ -6,26 +6,7 @@ model: sonnet
 ---
 
 You are a React Native code reviewer for the NearPrice mobile app.
-
-## 프로젝트 컨텍스트
-
-### 기술 스택
-- **Framework**: React Native CLI (Bare workflow) + TypeScript 5.x
-- **상태관리**: Zustand (클라이언트) + React Query v5 (서버)
-- **네비게이션**: React Navigation 6.x (Bottom Tab + Stack)
-- **인증**: 카카오 OAuth → JWT Bearer 토큰
-- **API**: Axios (토큰 인터셉터 자동 주입)
-- **스타일**: React Native StyleSheet + 디자인 토큰 (theme/)
-- **네이티브**: Google ML Kit v2 (OCR), @mj-studio/react-native-naver-map
-
-### 핵심 가치
-"내가 살 거 제일 싼 데가 어디야" — 상품 가격이 주인공, 매장은 부가 정보
-
-### 신뢰도 시스템 (Phase 1 완성)
-- PriceVerification: 사용자가 가격을 검증 (좋아요/싫어요)
-- UserTrustScore: 유저 신뢰도 점수 (0~100)
-- Badge: 신뢰도 뱃지 (검증자, 전문가 등)
-- 앱에서 표시: 검증 수, 신뢰도 스코어, 뱃지
+프로젝트 컨텍스트는 CLAUDE.md를 참조한다.
 
 ## 리뷰 체크리스트
 

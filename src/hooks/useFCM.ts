@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import messaging from '@react-native-firebase/messaging';
 import { Alert } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+import { useNotificationStore } from '../store/notificationStore';
 import { userApi } from '../api/user.api';
 
 /**
@@ -10,6 +11,7 @@ import { userApi } from '../api/user.api';
  */
 export const useFCM = () => {
   const user = useAuthStore((s) => s.user);
+  const setAllNotifications = useNotificationStore((s) => s.setAllNotifications);
 
   const saveFcmToken = useCallback(async (token: string) => {
     if (!user?.id) return;
@@ -24,17 +26,19 @@ export const useFCM = () => {
     if (!user?.id) return;
 
     const setup = async () => {
-      // 1. Firebase messaging으로 알림 권한 요청 (Android 13+ 자동 대응)
+      // 1. OS 알림 권한 확인/요청
       const authStatus = await messaging().requestPermission();
       const enabled =
         authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
+      // OS 권한 상태를 store에 반영 (권한 거부 시 앱 내 알림도 OFF)
       if (!enabled) {
-        return; // 권한 거부
+        setAllNotifications(false);
+        return;
       }
 
-      // 2. FCM 토큰 가져오기
+      // 2. FCM 토큰 가져오기 & 서버 저장
       try {
         const token = await messaging().getToken();
         await saveFcmToken(token);
@@ -64,5 +68,5 @@ export const useFCM = () => {
     setup().then((fn) => { cleanup = fn; });
 
     return () => { cleanup?.(); };
-  }, [user?.id, saveFcmToken]);
+  }, [user?.id, saveFcmToken, setAllNotifications]);
 };

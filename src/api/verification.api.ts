@@ -3,6 +3,7 @@ import type {
   CreateVerificationDto,
   VerificationResponse,
   VerificationListResponse,
+  MyVerificationsResponse,
   PriceTrustScoreResponse,
   UserTrustScoreResponse,
 } from '../types/api.types';
@@ -22,7 +23,17 @@ export const verificationApi = {
    */
   getVerifications: (priceId: string, page = 1, limit = 10) =>
     apiClient.get<VerificationListResponse>(
-      `/prices/${priceId}/verifications?page=${page}&limit=${limit}`,
+      `/prices/${priceId}/verifications`,
+      { params: { page, limit } },
+    ),
+
+  /**
+   * 내가 검증한 가격 목록 조회
+   */
+  getMyVerifications: (page = 1, limit = 20) =>
+    apiClient.get<MyVerificationsResponse>(
+      '/prices/my/verifications',
+      { params: { page, limit } },
     ),
 
   /**

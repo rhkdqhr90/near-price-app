@@ -1,3 +1,14 @@
+import * as Sentry from '@sentry/react-native';
+import Config from 'react-native-config';
+
+if (Config.SENTRY_DSN) {
+  Sentry.init({
+    dsn: Config.SENTRY_DSN,
+    environment: __DEV__ ? 'development' : 'production',
+    tracesSampleRate: __DEV__ ? 1.0 : 0.1,
+  });
+}
+
 import React, { useCallback } from 'react';
 import { StatusBar, StyleSheet, UIManager, Platform } from 'react-native';
 
@@ -6,7 +17,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { NavigationContainer } from '@react-navigation/native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './src/lib/queryClient';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -15,14 +27,6 @@ import RootNavigator from './src/navigation/RootNavigator';
 import Toast from './src/components/common/Toast';
 import OfflineBanner from './src/components/common/OfflineBanner';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 1000 * 60 * 5,
-    },
-  },
-});
 
 function App(): React.JSX.Element {
   const handleNavigationReady = useCallback(() => {
@@ -30,6 +34,7 @@ function App(): React.JSX.Element {
   }, []);
 
   return (
+    <Sentry.ErrorBoundary>
     <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
@@ -44,6 +49,7 @@ function App(): React.JSX.Element {
         </SafeAreaProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
+    </Sentry.ErrorBoundary>
   );
 }
 

@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
-import type { UnitType, PriceResponse } from '../types/api.types';
+import type { UnitType } from '../types/api.types';
 
 // ─── Auth Stack ────────────────────────────────────────────────────────────
 
@@ -14,9 +14,17 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   HomeStack: NavigatorScreenParams<HomeStackParamList>;
+  Flyer: NavigatorScreenParams<FlyerStackParamList>;
   PriceRegisterStack: NavigatorScreenParams<PriceRegisterStackParamList>;
   Wishlist: undefined;
   MyPageStack: NavigatorScreenParams<MyPageStackParamList>;
+};
+
+// ─── Flyer Stack ───────────────────────────────────────────────────────────
+
+export type FlyerStackParamList = {
+  FlyerList: undefined;
+  FlyerDetail: { flyerId: string };
 };
 
 // ─── MyPage Stack (nested in MyPageTab) ───────────────────────────────────
@@ -32,6 +40,8 @@ export type MyPageStackParamList = {
   Faq: undefined;
   Inquiry: undefined;
   NotificationSettings: undefined;
+  Terms: undefined;
+  PrivacyPolicy: undefined;
 };
 
 // ─── Home Stack (nested in HomeTab) ───────────────────────────────────────
@@ -112,5 +122,11 @@ export type MainTabScreenProps<T extends keyof MainTabParamList> =
 export type MyPageScreenProps<T extends keyof MyPageStackParamList> =
   CompositeScreenProps<
     NativeStackScreenProps<MyPageStackParamList, T>,
+    BottomTabScreenProps<MainTabParamList>
+  >;
+
+export type FlyerScreenProps<T extends keyof FlyerStackParamList> =
+  CompositeScreenProps<
+    NativeStackScreenProps<FlyerStackParamList, T>,
     BottomTabScreenProps<MainTabParamList>
   >;

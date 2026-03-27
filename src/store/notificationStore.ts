@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { storage, STORAGE_KEYS } from '../utils/storage';
+import { storage } from '../utils/storage';
 
 interface NotificationState {
   allNotifications: boolean;
@@ -9,52 +9,69 @@ interface NotificationState {
   setPriceChangeNotification: (enabled: boolean) => void;
   setPromotionNotification: (enabled: boolean) => void;
   restoreSettings: () => Promise<void>;
+  syncFromServer: (settings: { notifPriceChange: boolean; notifPromotion: boolean }) => void;
 }
 
 const noop = () => undefined;
 
 const NOTIFICATION_STORAGE_KEY = '@nearprice/notification_settings';
 
-export const useNotificationStore = create<NotificationState>((set) => ({
+export const useNotificationStore = create<NotificationState>((set, get) => ({
   allNotifications: true,
   priceChangeNotification: true,
   promotionNotification: false,
 
   setAllNotifications: (enabled) => {
-    set({ allNotifications: enabled });
+    const s = get();
+    const newPromotionNotification = enabled ? s.promotionNotification : false;
+    set({
+      allNotifications: enabled,
+      priceChangeNotification: enabled,
+      promotionNotification: newPromotionNotification,
+    });
     storage
       .set(NOTIFICATION_STORAGE_KEY, {
         allNotifications: enabled,
-        priceChangeNotification: enabled ? true : false,
-        promotionNotification: false,
+        priceChangeNotification: enabled,
+        promotionNotification: newPromotionNotification,
       })
       .catch(noop);
   },
 
   setPriceChangeNotification: (enabled) => {
-    set((state) => ({
-      priceChangeNotification: state.allNotifications ? enabled : false,
-    }));
+    const s = get();
+    const allNotifications = enabled || s.promotionNotification;
+    set({ priceChangeNotification: enabled, allNotifications });
     storage
       .set(NOTIFICATION_STORAGE_KEY, {
-        allNotifications: true,
+        allNotifications,
         priceChangeNotification: enabled,
-        promotionNotification: false,
+        promotionNotification: s.promotionNotification,
       })
       .catch(noop);
   },
 
   setPromotionNotification: (enabled) => {
-    set(() => ({
-      promotionNotification: enabled,
-    }));
+    const s = get();
+    const allNotifications = s.priceChangeNotification || enabled;
+    set({ promotionNotification: enabled, allNotifications });
     storage
       .set(NOTIFICATION_STORAGE_KEY, {
-        allNotifications: true,
-        priceChangeNotification: true,
+        allNotifications,
+        priceChangeNotification: s.priceChangeNotification,
         promotionNotification: enabled,
       })
       .catch(noop);
+  },
+
+  syncFromServer: (settings) => {
+    const state = {
+      priceChangeNotification: settings.notifPriceChange,
+      promotionNotification: settings.notifPromotion,
+      allNotifications: settings.notifPriceChange || settings.notifPromotion,
+    };
+    set(state);
+    storage.set(NOTIFICATION_STORAGE_KEY, state).catch(noop);
   },
 
   restoreSettings: async () => {

@@ -1,24 +1,21 @@
 import React, { useMemo } from 'react';
 import type { PriceResponse } from '../../types/api.types';
 import { useLocationStore } from '../../store/locationStore';
-import MapPriceView from '../map/PriceMapView';
-
-const DEFAULT_LAT = 37.5665;
-const DEFAULT_LNG = 126.978;
+import PriceMapView from '../map/PriceMapView';
+import { DEFAULT_LATITUDE, DEFAULT_LONGITUDE } from '../../utils/constants';
 
 interface Props {
   prices: PriceResponse[];
   onMarkerPress: (storeId: string) => void;
 }
 
-const PriceMapView: React.FC<Props> = ({ prices, onMarkerPress }) => {
+const PriceMapSection: React.FC<Props> = ({ prices, onMarkerPress }) => {
   const { latitude, longitude } = useLocationStore();
 
   const priceMarkers = useMemo(() => {
     const seen = new Set<string>();
     return prices
       .filter((p) => {
-        if (!p.store?.id) return false;
         if (seen.has(p.store.id)) return false;
         seen.add(p.store.id);
         return true;
@@ -26,21 +23,21 @@ const PriceMapView: React.FC<Props> = ({ prices, onMarkerPress }) => {
       .map((p) => ({
         id: p.store.id,
         price: p.price,
-        storeName: p.store?.name ?? '매장',
+        storeName: p.store.name,
         latitude: p.store.latitude,
         longitude: p.store.longitude,
       }));
   }, [prices]);
 
-  if (prices.length === 0) {
+  if (prices.length === 0 || priceMarkers.length === 0) {
     return null;
   }
 
-  const initialLat = latitude ?? prices[0]?.store.latitude ?? DEFAULT_LAT;
-  const initialLng = longitude ?? prices[0]?.store.longitude ?? DEFAULT_LNG;
+  const initialLat = latitude ?? prices[0]?.store.latitude ?? DEFAULT_LATITUDE;
+  const initialLng = longitude ?? prices[0]?.store.longitude ?? DEFAULT_LONGITUDE;
 
   return (
-    <MapPriceView
+    <PriceMapView
       prices={priceMarkers}
       onMarkerPress={onMarkerPress}
       initialLatitude={initialLat}
@@ -49,4 +46,5 @@ const PriceMapView: React.FC<Props> = ({ prices, onMarkerPress }) => {
   );
 };
 
-export default React.memo(PriceMapView);
+export default React.memo(PriceMapSection);
+

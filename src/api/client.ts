@@ -2,6 +2,7 @@ import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { useNetworkStore } from '../store/networkStore';
 import { API_BASE_URL } from '../utils/config';
+import { queryClient } from '../lib/queryClient';
 
 interface RetryConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -87,6 +88,8 @@ apiClient.interceptors.response.use(
         const { accessToken: newAccess, refreshToken: newRefresh } = res.data;
         setTokens(newAccess, newRefresh);
         processQueue(null, newAccess);
+        // 토큰 갱신 성공 후 UI가 stale 데이터를 유지하지 않도록 전체 캐시 무효화
+        void queryClient.invalidateQueries({});
         isRefreshing = false;
         config.headers.Authorization = `Bearer ${newAccess}`;
         return apiClient(config);

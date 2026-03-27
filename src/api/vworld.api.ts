@@ -100,7 +100,7 @@ export const vworldApi = {
 
       return null;
     } catch (error) {
-      console.error('[vworldApi.reverseGeocode] Error:', error);
+      if (__DEV__) { console.error('[vworldApi.reverseGeocode] Error:', error); }
       throw error;
     }
   },
@@ -131,7 +131,7 @@ export const vworldApi = {
       if (status === 'NOT_FOUND' || !result || result.length === 0) return null;
       return result[0].text || null;
     } catch (error) {
-      console.error('[vworldApi.reverseGeocodeFullAddress] Error:', error);
+      if (__DEV__) { console.error('[vworldApi.reverseGeocodeFullAddress] Error:', error); }
       throw error;
     }
   },

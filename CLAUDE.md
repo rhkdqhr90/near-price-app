@@ -17,7 +17,7 @@
 - ⛔ 카카오 지도/로컬 API 사용 금지 — Kakao Developers 심사 탈락으로 OPEN_MAP_AND_LOCAL 서비스 비활성화됨. kakao-local.api.ts 의존 코드 전면 교체 완료 후 삭제 예정
 - 인증: 카카오 OAuth → JWT Bearer 토큰
 - HTTP: Axios
-- 패키지 매니저: npm (pnpm/yarn 사용 금지)
+
 
 ## 백엔드 API
 - Base URL (개발): http://10.0.2.2:3000 (Android 에뮬레이터)
@@ -182,6 +182,27 @@ PriceRegisterStack (가격등록 탭 내부 Stack):
 └── StoreSelectScreen (매장 선택)
 ```
 
+## 공통 커맨드
+
+### 안드로이드 기기 테스트 (물리 기기)
+```bash
+# 1. Gradle 캐시 초기화
+cd android && ./gradlew clean && cd ..
+
+# 2. Metro 캐시 초기화 후 실행 (별도 터미널)
+npx react-native start --reset-cache
+
+# 3. 빌드 & 설치
+npx react-native run-android
+
+# ⚠️ 필수: 빌드 후 반드시 실행 (기기가 Metro 못 찾는 문제 방지)
+adb reverse tcp:8081 tcp:8081
+```
+
+> **주의**: `run-android` 빌드가 길어 도중 기기 연결이 끊길 수 있음.
+> APK 경로: `android/app/build/outputs/apk/debug/app-debug.apk`
+> 연결 끊긴 경우: `adb install -r <apk경로>` → `adb reverse tcp:8081 tcp:8081` 순서로 복구.
+
 ## 참조 문서
 - ~/Projects/docs/NearPrice_v3.0.docx — 기획서
 - ~/Projects/near-price-api/CLAUDE.md — 백엔드 컨텍스트
@@ -297,17 +318,5 @@ rn-reviewer 통과 후 변경 파일 기준으로 직접 확인:
 ```
 
 ---
-
-## 자동 수정 규칙
-
-- 각 단계 실패 시 스스로 에러를 분석하고 수정한다
-- Step 1~2 최대 3회 재시도. 3회 실패 시 사용자에게 보고하고 중단
-- 수정할 때 기존 코드의 의도를 훼손하지 않는다
-
 ## 디자인 시스템
 UI 구현 시 반드시 DESIGN_SYSTEM.md를 참조한다. 이 문서의 컬러, 타이포, 컴포넌트 스펙을 따르지 않는 코드는 리뷰 실패 처리한다.
-
-## 작업 범위 규칙
-- 프롬프트에 명시된 파일만 수정한다. 목록에 없는 파일은 절대 건드리지 않는다.
-- 자체 판단 리팩토링 금지. 요청받은 작업만 수행한다.
-- 리팩토링이 필요하다고 판단되면 수정하지 말고 보고만 한다.

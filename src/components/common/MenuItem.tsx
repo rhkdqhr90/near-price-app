@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import ChevronRightIcon from '../icons/ChevronRightIcon';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -29,7 +29,9 @@ const MenuItem = React.memo<MenuItemProps>(({
     accessibilityRole="button"
     accessibilityLabel={label}
   >
-    {icon}
+    <View style={[styles.iconChip, isDanger && styles.iconChipDanger]}>
+      {icon}
+    </View>
     <Text style={[styles.menuLabel, isDanger && styles.menuLabelDanger]}>
       {label}
     </Text>
@@ -45,11 +47,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.inputPad,
-    borderBottomWidth: 0.5,
-    borderBottomColor: colors.gray200,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
     minHeight: 52,
+  },
+  iconChip: {
+    width: spacing.backBtnSize,
+    height: spacing.backBtnSize,
+    borderRadius: spacing.radiusMd,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconChipDanger: {
+    backgroundColor: colors.dangerLight,
   },
   menuItemLast: {
     borderBottomWidth: 0,

@@ -1,21 +1,17 @@
 /*
- * 프로덕션 빌드를 위한 키스토어 생성 방법:
+ * 프로덕션 키스토어: android/app/near-price-release.keystore (git 제외됨)
+ * 키 별칭: near-price-key  |  유효기간: 10,000일
  *
- * 1. 키스토어 생성 명령어:
- *    keytool -genkey -v -keystore near-price-release-key.keystore \
- *      -keyalg RSA -keysize 2048 -validity 10000 \
- *      -alias near-price-key
+ * CI/CD 서명 흐름:
+ *   1. GitHub Secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+ *   2. build-android.yml: KEYSTORE_BASE64 → android/app/release.keystore 복원
+ *   3. gradle.properties 생성 → 이 파일의 signingConfigs.release에서 읽음
  *
- * 2. 환경 변수 설정:
- *    export RELEASE_KEYSTORE_FILE="/path/to/near-price-release-key.keystore"
- *    export RELEASE_KEYSTORE_PASSWORD="your_keystore_password"
- *    export RELEASE_KEY_ALIAS="near-price-key"
- *    export RELEASE_KEY_PASSWORD="your_key_password"
- *
- * 3. 빌드 명령어:
- *    cd android && ./gradlew assembleRelease
- *
- * 생성된 APK는 app/build/outputs/apk/release/app-release.apk에 위치합니다.
+ * 로컬 릴리스 빌드 시 android/gradle.properties에 추가:
+ *   KEYSTORE_PATH=./app/near-price-release.keystore
+ *   KEYSTORE_PASSWORD=<비밀번호>
+ *   KEY_ALIAS=near-price-key
+ *   KEY_PASSWORD=<비밀번호>
  */
 
 apply plugin: "com.android.application"
@@ -120,13 +116,14 @@ android {
             keyPassword 'android'
         }
         release {
-            // 프로덕션 환경에서 사용할 키스토어 설정
-            // 환경 변수에서 키스토어 경로, 비밀번호, 키 별칭을 읽음
-            // 예: RELEASE_KEYSTORE_FILE, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
-            storeFile file(System.getenv("RELEASE_KEYSTORE_FILE") ?: "debug.keystore")
-            storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("RELEASE_KEY_ALIAS")
-            keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            // gradle.properties 또는 CI에서 주입된 값 사용
+            // CI: build-android.yml에서 KEYSTORE_BASE64 → android/app/release.keystore 파일로 복원
+            if (project.hasProperty('KEYSTORE_PATH')) {
+                storeFile file(KEYSTORE_PATH)
+                storePassword project.property('KEYSTORE_PASSWORD')
+                keyAlias project.property('KEY_ALIAS')
+                keyPassword project.property('KEY_PASSWORD')
+            }
         }
     }
     buildTypes {

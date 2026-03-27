@@ -9,8 +9,10 @@ import {
   PermissionsAndroid,
   Alert,
 } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -55,9 +57,7 @@ const ICON_SIZE = 48;
 const ICON_BOX = 56;
 const ICON_RADIUS = 16;
 
-const requestAndroidPermission = async (config: PermissionConfig): Promise<void> => {
-  if (config.key === 'notification') return;
-
+const requestAndroidSystemPermission = async (config: PermissionConfig): Promise<void> => {
   const permission =
     config.key === 'location'
       ? PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
@@ -87,6 +87,7 @@ const requestAndroidPermission = async (config: PermissionConfig): Promise<void>
 
 const PermissionScreen: React.FC = () => {
   const { markOnboardingSeen } = useOnboardingStore();
+  const setAllNotifications = useNotificationStore((s) => s.setAllNotifications);
   const insets = useSafeAreaInsets();
   const [permissionStatuses, setPermissionStatuses] = useState<Record<string, boolean>>({
     location: false,
@@ -96,22 +97,35 @@ const PermissionScreen: React.FC = () => {
 
   const handleAllow = useCallback(async () => {
     const newStatuses: Record<string, boolean> = { ...permissionStatuses };
-    if (Platform.OS === 'android') {
-      for (const p of PERMISSION_LIST) {
+
+    for (const p of PERMISSION_LIST) {
+      if (p.key === 'notification') {
+        // FCM 알림 권한 요청 (iOS + Android 13+)
         try {
-          await requestAndroidPermission(p);
-          // 권한 요청 후 상태 업데이트
+          const status = await messaging().requestPermission();
+          const granted =
+            status === messaging.AuthorizationStatus.AUTHORIZED ||
+            status === messaging.AuthorizationStatus.PROVISIONAL;
+          newStatuses[p.key] = granted;
+          setAllNotifications(granted);
+        } catch {
+          newStatuses[p.key] = false;
+          setAllNotifications(false);
+        }
+      } else if (Platform.OS === 'android') {
+        try {
+          await requestAndroidSystemPermission(p);
           newStatuses[p.key] = true;
         } catch {
-          // 권한 거부 시
           newStatuses[p.key] = false;
         }
       }
     }
+
     setPermissionStatuses(newStatuses);
-    // iOS: 각 기능 첫 사용 시 시스템이 직접 요청
+    // iOS 위치/카메라: 각 기능 첫 사용 시 시스템이 직접 요청
     markOnboardingSeen();
-  }, [markOnboardingSeen, permissionStatuses]);
+  }, [markOnboardingSeen, permissionStatuses, setAllNotifications]);
 
   return (
     <View style={styles.container}>

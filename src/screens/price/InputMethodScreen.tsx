@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: colors.gray200,
   },
-  storeLabel: { ...typography.bodySm, fontWeight: '500' as const, color: colors.gray400, marginBottom: spacing.micro },
+  storeLabel: { ...typography.bodySm, fontWeight: '500' as const, color: colors.gray600, marginBottom: spacing.micro },
   storeName: { ...typography.headingMd },
   title: { ...typography.headingXl, paddingHorizontal: spacing.xl, paddingTop: spacing.xl + spacing.lg + spacing.md, paddingBottom: spacing.lg },
   cards: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.md },

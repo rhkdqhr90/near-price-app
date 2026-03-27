@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -16,17 +17,22 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MyPageScreenProps, MainTabParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
 import { useLocationStore } from '../../store/locationStore';
+import { usePriceRegisterStore } from '../../store/priceRegisterStore';
 import { useMyPrices } from '../../hooks/queries/usePrices';
 import { useMyWishlist } from '../../hooks/queries/useWishlist';
+import { useUserBadges } from '../../hooks/queries/useBadges';
+import { useMyVerifications } from '../../hooks/queries/useVerification';
 import MenuItem from '../../components/common/MenuItem';
+import SkeletonBox from '../../components/common/SkeletonBox';
 import TagIcon from '../../components/icons/TagIcon';
-import HeartIcon from '../../components/icons/HeartIcon';
 import BellIcon from '../../components/icons/BellIcon';
 import MapPinIcon from '../../components/icons/MapPinIcon';
 import LogOutIcon from '../../components/icons/LogOutIcon';
 import DocumentIcon from '../../components/icons/DocumentIcon';
 import HelpCircleIcon from '../../components/icons/HelpCircleIcon';
+import CheckIcon from '../../components/icons/CheckIcon';
 import { APP_VERSION } from '../../utils/config';
+import { isAxiosError } from '../../api/client';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -77,6 +83,12 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
   const [checkingNickname, setCheckingNickname] = useState(false);
 
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    };
+  }, []);
 
   const handleChangeNickname = (text: string) => {
     // 한글 자모(ㄱ-ㅎ, ㅏ-ㅣ) + 완성형(가-힣) + 영문 + 숫자 허용
@@ -131,20 +143,19 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
       await onUpdate(nickname);
       onClose();
     } catch (err) {
-      console.error('Nickname update error:', err);
       let message = '닉네임 변경에 실패했습니다';
 
-      // axios 에러 처리
-      if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response?: { status?: number; data?: { message?: string } } }).response;
-        if (response?.status === 409) {
+      if (isAxiosError(err)) {
+        const status = err.response?.status;
+        const data = err.response?.data as { message?: string } | undefined;
+        if (status === 409) {
           message = '이미 사용 중인 닉네임입니다';
-        } else if (response?.status === 400) {
-          message = response?.data?.message ?? '유효하지 않은 닉네임입니다';
-        } else if (response?.status === 429) {
+        } else if (status === 400) {
+          message = data?.message ?? '유효하지 않은 닉네임입니다';
+        } else if (status === 429) {
           message = '너무 빠르게 변경했습니다. 잠시 후 다시 시도해주세요';
-        } else if (response?.data?.message) {
-          message = response.data.message;
+        } else if (data?.message) {
+          message = data.message;
         }
       } else if (err instanceof Error) {
         message = err.message;
@@ -203,6 +214,8 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleClose}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="닉네임 변경 취소"
             >
               <Text style={styles.cancelButtonText}>취소</Text>
             </TouchableOpacity>
@@ -214,6 +227,8 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
               ]}
               onPress={handleUpdate}
               disabled={!canSubmit}
+              accessibilityRole="button"
+              accessibilityLabel="닉네임 변경 확인"
             >
               {loading ? (
                 <ActivityIndicator size="small" color={colors.white} />
@@ -232,12 +247,17 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
 
 const MyPageScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const user = useAuthStore(s => s.user);
   const setUser = useAuthStore(s => s.setUser);
   const logout = useAuthStore(s => s.logout);
+  const clearLocation = useLocationStore(s => s.clearLocation);
+  const resetPriceRegister = usePriceRegisterStore(s => s.reset);
   const regionName = useLocationStore(s => s.regionName);
   const { data: myPrices, isLoading: isPricesLoading, isError: isPricesError } = useMyPrices();
   const { data: wishlist, isLoading: isWishlistLoading, isError: isWishlistError } = useMyWishlist();
+  const { data: badgesData, isLoading: isBadgesLoading } = useUserBadges(user?.id);
+  const { data: verifications, isLoading: isVerificationsLoading, isError: isVerificationsError } = useMyVerifications();
 
   const [nicknameModalVisible, setNicknameModalVisible] = useState(false);
 
@@ -259,14 +279,21 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
     () => isPricesError ? '-' : isPricesLoading ? '...' : String(myPrices?.length ?? 0),
     [myPrices, isPricesLoading, isPricesError],
   );
-  const receivedLikes = useMemo(
-    () => isPricesError ? '-' : isPricesLoading ? '...' : String((myPrices ?? []).reduce((sum, p) => sum + p.likeCount, 0)),
-    [myPrices, isPricesLoading, isPricesError],
+  const verificationCount = useMemo(
+    () => isVerificationsError ? '-' : isVerificationsLoading ? '...' : String(verifications?.meta.total ?? 0),
+    [verifications, isVerificationsLoading, isVerificationsError],
   );
   const wishlistCount = useMemo(
     () => isWishlistError ? '-' : isWishlistLoading ? '...' : String(wishlist?.totalCount ?? 0),
     [wishlist, isWishlistLoading, isWishlistError],
   );
+  // 진행중 뱃지 우선, 최대 2개 표시
+  const displayBadges = useMemo(() => {
+    const progress = (badgesData?.progress ?? []).slice(0, 2).map(b => ({ kind: 'progress' as const, data: b }));
+    if (progress.length >= 2) return progress;
+    const earned = (badgesData?.earned ?? []).slice(0, 2 - progress.length).map(b => ({ kind: 'earned' as const, data: b }));
+    return [...progress, ...earned];
+  }, [badgesData]);
 
   const handleNavigateMyPriceList = useCallback(() => {
     navigation.navigate('MyPriceList');
@@ -282,10 +309,6 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleNavigateNoticeList = useCallback(() => {
     navigation.navigate('NoticeList');
-  }, [navigation]);
-
-  const handleNavigateFaq = useCallback(() => {
-    navigation.navigate('Faq');
   }, [navigation]);
 
   const handleNavigateInquiry = useCallback(() => {
@@ -304,16 +327,57 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('NotificationSettings');
   }, [navigation]);
 
-  const handleComingSoon = useCallback(() => {
-    Alert.alert('준비 중', '곧 제공될 예정이에요.');
-  }, []);
+  const handleNavigateTerms = useCallback(() => {
+    navigation.navigate('Terms');
+  }, [navigation]);
+
+  const handleNavigatePrivacyPolicy = useCallback(() => {
+    navigation.navigate('PrivacyPolicy');
+  }, [navigation]);
 
   const handleLogout = useCallback(() => {
     Alert.alert('로그아웃', '정말 로그아웃 하시겠어요?', [
       { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: logout },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: () => {
+          clearLocation();
+          resetPriceRegister();
+          logout();
+          queryClient.clear();
+        },
+      },
     ]);
-  }, [logout]);
+  }, [logout, clearLocation, resetPriceRegister, queryClient]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      '회원 탈퇴',
+      '정말 탈퇴하시겠습니까? 등록한 가격 정보는 익명으로 유지됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await userApi.deleteAccount();
+              clearLocation();
+              resetPriceRegister();
+              logout();
+              queryClient.clear();
+            } catch {
+              Alert.alert(
+                '오류',
+                '회원 탈퇴에 실패했습니다. 다시 시도해주세요.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [logout, clearLocation, resetPriceRegister, queryClient]);
 
   const handleNicknameModalOpen = useCallback(() => {
     setNicknameModalVisible(true);
@@ -325,7 +389,7 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleNicknameUpdate = useCallback(
     async (newNickname: string) => {
-      if (!user?.id) return;
+      if (!user) return;
 
       const response = await userApi.updateNickname(user.id, {
         nickname: newNickname,
@@ -349,9 +413,10 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={scrollContentStyle}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. 프로필 영역 */}
+        {/* 1. 프로필 섹션 */}
         <View style={styles.profileSection}>
-          <View style={styles.profileCenter}>
+          {/* 아바타 */}
+          <View style={styles.avatarWrapper}>
             {user?.profileImageUrl ? (
               <Image
                 source={{ uri: user.profileImageUrl }}
@@ -364,132 +429,210 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.avatarText}>{initials}</Text>
               </View>
             )}
-            <Text style={styles.nickname}>{displayNickname}</Text>
-            <View style={styles.profileMeta}>
-              <Text style={styles.regionText}>📍 {regionName ?? '동네 미설정'}</Text>
-              {user?.trustScore != null && (
-                <Text style={styles.trustText}>⭐ 신뢰도 {user.trustScore}</Text>
-              )}
+            <View style={styles.avatarVerifiedBadge}>
+              <CheckIcon size={10} color={colors.white} />
             </View>
+          </View>
+
+          {/* 이름 + 편집 */}
+          <View style={styles.nicknameRow}>
+            <Text style={styles.nickname}>{displayNickname}</Text>
             <TouchableOpacity
-              style={styles.nicknameEditBtn}
               onPress={handleNicknameModalOpen}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="닉네임 변경"
             >
-              <Text style={styles.nicknameEditBtnText}>프로필 편집</Text>
+              <Text style={styles.nicknameEditBtnText}>편집</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* 위치 */}
+          <View style={styles.locationRow}>
+            <MapPinIcon size={spacing.iconXs} color={colors.gray600} />
+            <Text style={styles.regionText}>{regionName ?? '동네 미설정'}</Text>
+          </View>
+
+          {/* 신뢰도 배지 */}
+          {user?.trustScore != null && (
+            <View style={styles.trustBadgePill}>
+              <CheckIcon size={14} color={colors.white} />
+              <Text style={styles.trustBadgePillText}>신뢰도 레벨 {user.trustScore}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* 2. 통계 그리드 */}
+        <View style={styles.statsGrid}>
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.7}
+            onPress={handleNavigateMyPriceList}
+            accessibilityRole="button"
+            accessibilityLabel={`등록한 가격 ${priceCount}개`}
+          >
+            <Text style={styles.statCount}>{priceCount}</Text>
+            <Text style={styles.statLabel}>등록한{'\n'}가격</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.7}
+            onPress={handleNavigateLikedPrices}
+            accessibilityRole="button"
+            accessibilityLabel={`인정한 가격 ${verificationCount}개`}
+          >
+            <Text style={styles.statCount}>{verificationCount}</Text>
+            <Text style={styles.statLabel}>인정한{'\n'}가격</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.7}
+            onPress={handleNavigateWishlist}
+            accessibilityRole="button"
+            accessibilityLabel={`찜한 상품 ${wishlistCount}개`}
+          >
+            <Text style={styles.statCount}>{wishlistCount}</Text>
+            <Text style={styles.statLabel}>찜한{'\n'}상품</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 3. 뱃지 섹션 */}
+        {(isBadgesLoading || displayBadges.length > 0) && (
+          <View style={styles.sectionOuter}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>나의 뱃지</Text>
+              <TouchableOpacity
+                onPress={handleNavigateBadge}
+                accessibilityRole="button"
+                accessibilityLabel="뱃지 전체보기"
+              >
+                <Text style={styles.sectionHeaderLink}>전체보기</Text>
+              </TouchableOpacity>
+            </View>
+            {isBadgesLoading ? (
+              <View style={styles.badgeList}>
+                <SkeletonBox style={styles.badgeSkeleton} />
+                <SkeletonBox style={styles.badgeSkeleton} />
+              </View>
+            ) : (
+            <View style={styles.badgeList}>
+              {displayBadges.map(item => (
+                <View
+                  key={`${item.kind}-${item.data.type}`}
+                  style={[
+                    styles.badgeCard,
+                    item.kind === 'earned' ? styles.badgeCardEarned : styles.badgeCardProgress,
+                  ]}
+                >
+                  <View style={styles.badgeCardTop}>
+                    <View style={styles.badgeLeft}>
+                      <View style={[
+                        styles.badgeIconWrap,
+                        item.kind === 'earned' ? styles.badgeIconWrapEarned : styles.badgeIconWrapProgress,
+                      ]}>
+                        <Text style={styles.badgeIcon}>{item.data.icon}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.badgeName}>{item.data.name}</Text>
+                        <Text style={styles.badgeCategory}>
+                          {item.data.category === 'registration' ? '가격 등록' : item.data.category === 'verification' ? '가격 검증' : '신뢰도'}
+                        </Text>
+                      </View>
+                    </View>
+                    {item.kind === 'earned' ? (
+                      <CheckIcon size={20} color={colors.primary} />
+                    ) : (
+                      <View style={styles.badgeLevelBadge}>
+                        <Text style={styles.badgeLevelText}>{item.data.progressPercent}%</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.badgeProgressSection}>
+                    <View style={styles.badgeProgressMeta}>
+                      <Text style={styles.badgeProgressLabel}>PROGRESS</Text>
+                      <Text style={styles.badgeProgressValue}>
+                        {item.kind === 'earned' ? '완료' : `${item.data.progressPercent}%`}
+                      </Text>
+                    </View>
+                    <View style={styles.badgeProgressBar}>
+                      <View
+                        style={[
+                          styles.badgeProgressFill,
+                          item.kind === 'earned' ? styles.badgeProgressFillEarned : styles.badgeProgressFillProgress,
+                          { width: `${item.kind === 'earned' ? 100 : item.data.progressPercent}%` },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+            )}
+          </View>
+        )}
+
+        {/* 4. 나의 활동 섹션 */}
+        <View style={styles.sectionOuter}>
+          <Text style={styles.sectionLabel}>나의 활동</Text>
+          <View style={styles.sectionCard}>
+            <MenuItem
+              icon={<TagIcon size={20} color={colors.primary} />}
+              label="내가 등록한 가격"
+              onPress={handleNavigateMyPriceList}
+            />
+            <MenuItem
+              icon={<CheckIcon size={20} color={colors.primary} />}
+              label="내가 인정한 가격"
+              onPress={handleNavigateLikedPrices}
+            />
+            <MenuItem
+              icon={<MapPinIcon size={20} color={colors.primary} />}
+              label="내 동네 설정"
+              rightLabel={regionName ?? '미설정'}
+              onPress={handleLocationChange}
+            />
+            <MenuItem
+              icon={<BellIcon size={20} color={colors.primary} />}
+              label="알림 설정"
+              onPress={handleNotificationSettings}
+            />
+            <MenuItem
+              icon={<DocumentIcon size={20} color={colors.primary} />}
+              label="공지사항"
+              onPress={handleNavigateNoticeList}
+            />
+            <MenuItem
+              icon={<HelpCircleIcon size={20} color={colors.primary} />}
+              label="도움말 / 문의"
+              onPress={handleNavigateInquiry}
+            />
+            <MenuItem
+              icon={<DocumentIcon size={20} color={colors.primary} />}
+              label="이용약관"
+              onPress={handleNavigateTerms}
+            />
+            <MenuItem
+              icon={<DocumentIcon size={20} color={colors.primary} />}
+              label="개인정보처리방침"
+              onPress={handleNavigatePrivacyPolicy}
+            />
+            <MenuItem
+              icon={<LogOutIcon size={20} color={colors.primary} />}
+              label="로그아웃"
+              onPress={handleLogout}
+              isDanger
+            />
+            <MenuItem
+              icon={<LogOutIcon size={20} color={colors.danger} />}
+              label="회원 탈퇴"
+              onPress={handleDeleteAccount}
+              isLast
+              isDanger
+            />
           </View>
         </View>
 
-      <View style={styles.sectionGap} />
-
-      {/* 2. 활동 요약 카드 */}
-      <View style={styles.summarySection}>
-        <TouchableOpacity
-          style={styles.summaryCard}
-          activeOpacity={0.7}
-          onPress={handleNavigateMyPriceList}
-          accessibilityRole="button"
-          accessibilityLabel={`등록한 가격 ${priceCount}개`}
-        >
-          <Text style={styles.summaryCount}>{priceCount}</Text>
-          <Text style={styles.summaryLabel}>등록한 가격</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.summaryCard}
-          activeOpacity={0.7}
-          onPress={handleNavigateLikedPrices}
-          accessibilityRole="button"
-          accessibilityLabel={`받은 좋아요 ${receivedLikes}개`}
-        >
-          <Text style={styles.summaryCount}>{receivedLikes}</Text>
-          <Text style={styles.summaryLabel}>받은 좋아요</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.summaryCard}
-          activeOpacity={0.7}
-          onPress={handleNavigateWishlist}
-          accessibilityRole="button"
-          accessibilityLabel={`찜한 상품 ${wishlistCount}개`}
-        >
-          <Text style={styles.summaryCount}>{wishlistCount}</Text>
-          <Text style={styles.summaryLabel}>찜한 상품</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.sectionGap} />
-
-      {/* 3. 나의 활동 섹션 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>나의 활동</Text>
-        <MenuItem
-          icon={<TagIcon size={20} color={colors.gray700} />}
-          label="내가 등록한 가격"
-          onPress={handleNavigateMyPriceList}
-        />
-        <MenuItem
-          icon={<HeartIcon size={20} color={colors.gray700} />}
-          label="좋아요한 가격"
-          onPress={handleNavigateLikedPrices}
-        />
-        <MenuItem
-          icon={<DocumentIcon size={20} color={colors.gray700} />}
-          label="나의 뱃지"
-          onPress={handleNavigateBadge}
-          isLast
-        />
-      </View>
-
-      <View style={styles.sectionGap} />
-
-      {/* 4. 설정 섹션 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>설정</Text>
-        <MenuItem
-          icon={<MapPinIcon size={20} color={colors.gray700} />}
-          label="내 동네 설정"
-          rightLabel={regionName ?? '미설정'}
-          onPress={handleLocationChange}
-        />
-        <MenuItem
-          icon={<BellIcon size={20} color={colors.gray700} />}
-          label="알림 설정"
-          onPress={handleNotificationSettings}
-        />
-        <MenuItem
-          icon={<DocumentIcon size={20} color={colors.gray700} />}
-          label="공지사항"
-          onPress={handleNavigateNoticeList}
-        />
-        <MenuItem
-          icon={<LogOutIcon size={20} color={colors.gray700} />}
-          label="로그아웃"
-          onPress={handleLogout}
-          isLast
-          isDanger
-        />
-      </View>
-
-      <View style={styles.sectionGap} />
-
-      {/* 5. 기타 섹션 */}
-      <View style={styles.section}>
-        <MenuItem
-          icon={<HelpCircleIcon size={20} color={colors.gray700} />}
-          label="도움말 / 문의"
-          onPress={handleNavigateInquiry}
-        />
-        <MenuItem
-          icon={<DocumentIcon size={20} color={colors.gray700} />}
-          label="이용약관 / 개인정보"
-          onPress={handleComingSoon}
-          isLast
-        />
-      </View>
-
-      <Text style={styles.appVersion}>v{APP_VERSION}</Text>
+        <Text style={styles.appVersion}>v{APP_VERSION}</Text>
       </ScrollView>
 
       {/* 닉네임 변경 모달 */}
@@ -506,144 +649,277 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.secondaryBg,
   },
 
-  // 프로필
+  // ─── 프로필 ───────────────────────────────────────────────────────────
   profileSection: {
-    backgroundColor: colors.white,
-    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xl,
     paddingHorizontal: spacing.xl,
   },
-  profileCenter: {
-    alignItems: 'center',
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: spacing.md,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: spacing.avatarSize,
+    height: spacing.avatarSize,
+    borderRadius: spacing.radiusFull,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    borderWidth: spacing.xs,
+    borderColor: colors.gray200,
+    elevation: spacing.sm,
   },
   avatarImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginBottom: spacing.md,
+    width: spacing.avatarSize,
+    height: spacing.avatarSize,
+    borderRadius: spacing.radiusFull,
+    borderWidth: spacing.xs,
+    borderColor: colors.gray200,
   },
   avatarText: {
-    fontSize: 28,
+    fontSize: spacing.avatarInitialFont,
     fontWeight: '700' as const,
     color: colors.white,
   },
-  nickname: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.black,
-    marginBottom: spacing.xs,
+  avatarVerifiedBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: spacing.xxl,
+    height: spacing.xxl,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: colors.primary,
+    borderWidth: spacing.borderMedium,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: spacing.xs,
   },
-  profileMeta: {
+  nicknameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  nickname: {
+    ...typography.headingXl,
+  },
+  nicknameEditBtnText: {
+    ...typography.bodySm,
+    color: colors.primary,
+    fontWeight: '600' as const,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.micro,
     marginBottom: spacing.md,
   },
   regionText: {
     ...typography.bodySm,
     color: colors.gray600,
   },
-  trustText: {
-    ...typography.bodySm,
-    color: colors.accent,
-    fontWeight: '600' as const,
-  },
-  nicknameEditBtn: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xl,
+  trustBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
     borderRadius: spacing.radiusFull,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
-  nicknameEditBtnText: {
+  trustBadgePillText: {
     ...typography.bodySm,
-    color: colors.gray700,
-    fontWeight: '500' as const,
+    fontWeight: '700' as const,
+    color: colors.white,
   },
-  trustBadge: {
+
+  // ─── 통계 그리드 ──────────────────────────────────────────────────────
+  statsGrid: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.gray100,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    elevation: spacing.borderThin,
+  },
+  statCount: {
+    ...typography.activityCount,
+    color: colors.primary,
+    marginBottom: spacing.micro,
+  },
+  statLabel: {
+    ...typography.caption,
+    fontWeight: '600' as const,
+    color: colors.gray600,
+    textAlign: 'center',
+  },
+
+  // ─── 섹션 공통 ────────────────────────────────────────────────────────
+  sectionOuter: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.headingMd,
+    color: colors.black,
+    marginBottom: spacing.sm,
+  },
+  sectionCard: {
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusMd,
+    overflow: 'hidden',
+    elevation: spacing.borderMedium,
+  },
+  sectionHeaderLink: {
+    ...typography.bodySm,
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
+
+  // ─── 뱃지 ────────────────────────────────────────────────────────────
+  badgeList: {
+    gap: spacing.sm,
+  },
+  badgeSkeleton: {
+    height: spacing.badgeCardMinHeight,
+    borderRadius: spacing.radiusMd,
+  },
+  badgeCard: {
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusMd,
+    padding: spacing.md,
+    borderLeftWidth: spacing.xs,
+    elevation: spacing.borderMedium,
+  },
+  badgeCardEarned: {
+    borderLeftColor: colors.primary,
+  },
+  badgeCardProgress: {
+    borderLeftColor: colors.warning,
+  },
+  badgeCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  badgeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  badgeIconWrap: {
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
+    borderRadius: spacing.radiusFull,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeIconWrapEarned: {
     backgroundColor: colors.primaryLight,
+  },
+  badgeIconWrapProgress: {
+    backgroundColor: colors.warningLight,
+  },
+  badgeIcon: {
+    fontSize: spacing.xl,
+  },
+  badgeName: {
+    ...typography.bodySm,
+    fontWeight: '700' as const,
+    color: colors.black,
+    marginBottom: spacing.micro,
+  },
+  badgeCategory: {
+    ...typography.caption,
+    color: colors.gray400,
+  },
+  badgeLevelBadge: {
+    backgroundColor: colors.warningLight,
     borderRadius: spacing.radiusFull,
     paddingVertical: spacing.micro,
     paddingHorizontal: spacing.sm,
   },
-  trustBadgeText: {
+  badgeLevelText: {
     ...typography.caption,
-    fontWeight: '500' as const,
-    color: colors.primary,
+    fontWeight: '700' as const,
+    color: colors.warning,
   },
-
-  // 섹션 구분
-  sectionGap: {
-    height: spacing.sm,
-    backgroundColor: colors.gray100,
+  badgeProgressSection: {
+    gap: spacing.xs,
   },
-
-  // 활동 요약
-  summarySection: {
+  badgeProgressMeta: {
     flexDirection: 'row',
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xl,
-    gap: spacing.md,
+    justifyContent: 'space-between',
   },
-  summaryCard: {
-    flex: 1,
+  badgeProgressLabel: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.gray400,
+  },
+  badgeProgressValue: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.gray400,
+  },
+  badgeProgressBar: {
+    height: spacing.micro,
     backgroundColor: colors.gray100,
-    borderRadius: spacing.radiusMd,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
+    borderRadius: spacing.radiusFull,
+    overflow: 'hidden',
   },
-  summaryCount: {
-    ...typography.activityCount,
-    marginBottom: spacing.xs,
+  badgeProgressFill: {
+    height: '100%',
+    borderRadius: spacing.radiusFull,
   },
-  summaryLabel: {
-    ...typography.bodySm,
+  badgeProgressFillEarned: {
+    backgroundColor: colors.primary,
   },
-
-  // 섹션
-  section: {
-    backgroundColor: colors.white,
-  },
-  sectionHeader: {
-    ...typography.tagText,
-    color: colors.gray600,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
+  badgeProgressFillProgress: {
+    backgroundColor: colors.warning,
   },
 
-  // 앱 버전
+  // ─── 앱 버전 ──────────────────────────────────────────────────────────
   appVersion: {
-    ...typography.bodySm,
-    color: colors.cardPriceStrike,
+    ...typography.caption,
+    color: colors.gray400,
     textAlign: 'center',
     paddingVertical: spacing.xl,
   },
 
-  // ─── 모달 ──────────────────────────────────────────────────────────────
+  // ─── 모달 ────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.modalOverlayDark,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     backgroundColor: colors.white,
-    borderRadius: spacing.radiusLg,
+    borderRadius: spacing.radiusMd,
     padding: spacing.xl,
     width: '85%',
-    maxWidth: 320,
+    maxWidth: spacing.modalMaxWidth,
+    elevation: spacing.lg,
   },
   modalTitle: {
     ...typography.headingLg,
@@ -651,7 +927,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   nicknameInput: {
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: colors.gray200,
     borderRadius: spacing.radiusMd,
     paddingHorizontal: spacing.md,
@@ -693,7 +969,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: colors.gray100,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: colors.gray200,
   },
   cancelButtonText: {
