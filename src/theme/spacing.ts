@@ -73,6 +73,7 @@ export const spacing = {
 
   // 랭크 뱃지
   rankBadgeSize: 28,
+  heartBtnSm: 30,      // 찜 삭제 버튼 (absolute 원형)
 
   // 테두리 두께
   borderThin: 1,
@@ -89,6 +90,12 @@ export const spacing = {
 
   // 프로필 아바타 크기
   avatarSize: 112,
+
+  // PriceDetailScreen 전용 크기 토큰
+  priceDetailChartH: 128,          // 가격 트렌드 차트 플레이스홀더 높이
+  priceDetailRankCircleSm: 32,     // 2위/3위 순위 원형 배지 크기
+  priceDetailVerifyAvatarSize: 48, // 인증 현황 아바타 크기
+  badgePadH: 10,                   // 배지 수평 패딩 (sm+micro = 8+2)
 
   // 매장 썸네일 크기 (PriceCompareScreen 1위 카드)
   storeThumbSize: 80,
@@ -123,6 +130,12 @@ export const spacing = {
   fabPlusFontSize: 28,
   fabPlusLineHeight: 32,
   fabOverhang: 20,       // 탭바 상단 돌출 오프셋 (marginTop: -fabOverhang)
+
+  // FAB 그림자 토큰
+  fabShadowOffsetY: 6,
+  fabShadowOpacity: 0.4,
+  fabShadowRadius: 12,
+  fabShadowElevation: 10,
 
   // 비활성화 불투명도
   disabledOpacity: 0.6,

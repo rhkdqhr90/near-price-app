@@ -176,6 +176,7 @@ const StoreSearchResultsSheet: React.FC<Props> = ({
           keyboardShouldPersistTaps="always"
           nestedScrollEnabled={true}
           bounces={true}
+          removeClippedSubviews={true}
         />
       </View>
     </View>

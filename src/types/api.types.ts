@@ -36,6 +36,9 @@ export interface UpdateNicknameDto {
   nickname: string;
 }
 
+// UserResponse에서 파생하여 필드 추가 시 자동 동기화
+export type UpdateNotificationSettingsDto = Partial<Pick<UserResponse, 'notifPriceChange' | 'notifPromotion'>>;
+
 export interface CheckNicknameResponseDto {
   available: boolean;
 }
@@ -451,7 +454,7 @@ export interface OwnerPostResponse {
 export interface ProductPriceCard {
   productId: string;
   productName: string;
-  unitType: string | null;
+  unitType: UnitType | null; // 집계 결과에서 단위 정보가 없는 경우 null (ProductResponse와 의도적 차이)
   minPrice: number;
   maxPrice: number;
   storeCount: number;

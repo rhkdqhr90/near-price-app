@@ -20,10 +20,10 @@ export const usePriceDetail = (priceId: string) => {
   });
 };
 
-export const useProductPrices = (productId: string) => {
-  return useQuery<PriceResponse[]>({
-    queryKey: priceKeys.byProduct(productId),
-    queryFn: () => priceApi.getByProduct(productId).then(res => res.data),
+export const useProductPrices = (productId: string, page = 1, limit = 20) => {
+  return useQuery<PaginatedResponse<PriceResponse>>({
+    queryKey: [...priceKeys.byProduct(productId), page, limit] as const,
+    queryFn: () => priceApi.getByProduct(productId, page, limit).then(res => res.data),
     enabled: productId.length > 0,
   });
 };
@@ -56,7 +56,8 @@ export const useInfiniteRecentPrices = () => {
 export const useMyPrices = () => {
   return useQuery<PriceResponse[]>({
     queryKey: priceKeys.mine,
-    queryFn: () => priceApi.getMy().then(res => res.data.data),
+    queryFn: (): Promise<PriceResponse[]> =>
+      priceApi.getMy().then(res => res.data.data),
   });
 };
 

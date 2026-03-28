@@ -30,6 +30,7 @@ import TagIcon from '../../components/icons/TagIcon';
 import StoreIcon from '../../components/icons/StoreIcon';
 import CloseIcon from '../../components/icons/CloseIcon';
 import HeartIcon from '../../components/icons/HeartIcon';
+import CheckIcon from '../../components/icons/CheckIcon';
 import { storage, STORAGE_KEYS } from '../../utils/storage';
 import { formatPrice, fixImageUrl } from '../../utils/format';
 import { colors } from '../../theme/colors';
@@ -230,6 +231,9 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
                 <Text style={styles.storeCountBadgeText}>매장 {item.storeCount}곳</Text>
               </View>
             )}
+            <View style={styles.priceBadge}>
+              <Text style={styles.priceBadgeText}>{formatPrice(item.minPrice)}</Text>
+            </View>
           </View>
           <View style={styles.gridInfo}>
             {item.hasClosingDiscount && (
@@ -238,10 +242,10 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
               </View>
             )}
             <Text style={styles.gridProductName} numberOfLines={2}>{item.productName}</Text>
-            <Text style={styles.gridPrice}>{formatPrice(item.minPrice)}</Text>
-            {item.minPrice !== item.maxPrice && (
-              <Text style={styles.gridPriceRange}>~{formatPrice(item.maxPrice)}</Text>
-            )}
+            <View style={styles.verifiedRow}>
+              <CheckIcon size={12} color={colors.midnightMint} />
+              <Text style={styles.verifiedText}>인증된 가격</Text>
+            </View>
             <View style={styles.gridStoreRow}>
               <StoreIcon size={11} color={colors.gray400} />
               <Text style={styles.gridStoreName} numberOfLines={1}>{item.storeName}</Text>
@@ -617,16 +621,14 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: spacing.radiusLg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    shadowColor: colors.shadowBase,
+    shadowColor: colors.tertiaryContainer,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   gridCardPressed: {
     opacity: 0.97,
@@ -694,17 +696,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: spacing.xs,
   },
-  gridPrice: {
-    fontSize: 16,
+  priceBadge: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.priceBadgeBg,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  priceBadgeText: {
+    fontSize: 13,
     fontWeight: '900' as const,
     color: colors.primary,
+  },
+  verifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginBottom: spacing.xs,
   },
-  gridPriceRange: {
-    fontSize: 11,
-    fontWeight: '500' as const,
-    color: colors.gray400,
-    marginBottom: spacing.xs,
+  verifiedText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: colors.midnightMint,
   },
   gridStoreRow: {
     flexDirection: 'row',

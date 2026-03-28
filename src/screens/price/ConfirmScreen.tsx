@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Image,
   StyleSheet, Alert, InteractionManager, type ListRenderItemInfo,
@@ -65,8 +65,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
           };
           await priceApi.create(dto);
           succeededIndicesRef.current.push(i);
-        } catch (e) {
-          if (__DEV__) console.error('[ConfirmScreen] 가격 등록 실패:', e);
+        } catch {
           failedCount += 1;
         }
       }
@@ -160,8 +159,13 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
     submitAll(items);
   }, [items, submitAll]);
 
+  const containerStyle = useMemo(
+    () => [styles.container, { paddingBottom: Math.max(insets.bottom, spacing.md) }],
+    [insets.bottom],
+  );
+
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+    <View style={containerStyle}>
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{storeName ?? ''}</Text>
@@ -179,6 +183,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
         />
       )}
 

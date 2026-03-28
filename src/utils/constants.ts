@@ -1,5 +1,3 @@
-// TODO: 서버 API 연동 시 아래 정적 데이터들을 서버에서 받아올 것
-
 // 기본 좌표 — 위치 권한 거부 시 서울 중심 좌표를 초기값으로 사용
 export const DEFAULT_LATITUDE = 37.5665;
 export const DEFAULT_LONGITUDE = 126.978;

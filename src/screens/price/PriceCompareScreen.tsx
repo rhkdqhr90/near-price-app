@@ -286,7 +286,13 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
 
         {/* 1위 카드 */}
         {first && (
-          <View style={styles.rankFirstCard}>
+          <TouchableOpacity
+            style={styles.rankFirstCard}
+            onPress={() => handlePriceCardPress(first)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`1위 ${first.store.name} ${formatPrice(first.price)}`}
+          >
             <View style={styles.rankFirstBadge}>
               <Text style={styles.rankFirstBadgeText}>실시간 최저가 1위</Text>
             </View>
@@ -318,7 +324,7 @@ const PriceCompareScreen: React.FC<Props> = ({ route, navigation }) => {
               <MapPinIcon size={spacing.iconSm} color={colors.white} />
               <Text style={styles.rankFirstRouteBtnText}>매장으로 길찾기</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* 2, 3위 그리드 */}
@@ -788,7 +794,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   heroInfo: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
@@ -827,7 +833,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
   sectionTitle: {
     ...typography.headingMd,
@@ -929,10 +935,14 @@ const styles = StyleSheet.create({
   },
   rankGridCard: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: spacing.radiusMd,
     padding: spacing.md,
-    elevation: 1,
+    shadowColor: colors.tertiaryContainer,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowOpacity: 0.08,
+    shadowRadius: spacing.shadowRadiusXl,
+    elevation: 3,
   },
   rankGridTop: {
     flexDirection: 'row',

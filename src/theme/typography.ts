@@ -110,4 +110,35 @@ export const typography = {
     color: colors.primary,
     letterSpacing: -0.5,
   },
+
+  // ─── PriceDetailScreen 전용 타이포그래피 토큰 ─────────────────────────────
+  // 상품 상세 타이틀 (28pt 900 ExtraBold)
+  productDetailTitle: {
+    fontFamily: PJS.extraBold,
+    fontSize: 28,
+    letterSpacing: -0.4,
+    lineHeight: 35,
+  },
+  // 대형 가격 표시 숫자 (40pt 900 ExtraBold)
+  priceHero: {
+    fontFamily: PJS.extraBold,
+    fontSize: 40,
+    letterSpacing: -2,
+    lineHeight: 48,
+  },
+  // 가격 단위 "원" (20pt 700 Bold)
+  priceHeroUnit: {
+    fontFamily: PJS.bold,
+    fontSize: 20,
+  },
+  // 중간 레이블 (14pt Bold) — 버튼, 배지 등
+  labelMd: {
+    fontFamily: PJS.bold,
+    fontSize: 14,
+  },
+  // 작은 레이블 (12pt Regular) — 서브 텍스트, 시간 표시 등
+  labelSm: {
+    fontFamily: PJS.regular,
+    fontSize: 12,
+  },
 } as const;

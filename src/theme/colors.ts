@@ -94,13 +94,38 @@ export const colors = {
   featuredImageOverlay: 'rgba(0,0,0,0.18)',
   heartBtnBg: 'rgba(0,0,0,0.28)',
   distanceBadgeBg: 'rgba(0,0,0,0.42)',
+  priceBadgeBg: 'rgba(255,255,255,0.92)',
+  wishlistImgBg: '#1c2315',       // 찜 카드 이미지 플레이스홀더 배경 (다크 올리브)
   flyerSubtitleText: 'rgba(255,255,255,0.88)',
+  flyerSubtitleTextDim: 'rgba(255,255,255,0.55)',
+  flyerBannerBg: '#16110c',
+  flyerFanBgLeft: '#1a2e14',
+  flyerFanBgCenter: '#142410',
+  flyerFanBgRight: '#2e1e08',
   flyerCircleOverlay: 'rgba(255,255,255,0.12)',
   flyerCircleOverlayFaint: 'rgba(255,255,255,0.08)',
   // 전단지 상세 헤더 glassmorphism
   flyerDetailHeaderBg: 'rgba(255,253,248,0.95)',
   flyerHeroDateLine: 'rgba(255,255,255,0.40)',
   flyerHeroDateText: 'rgba(255,255,255,0.97)',
+
+  // Material 3 on-surface-variant / outline (olive-tinted)
+  onSurfaceVariant: '#43483f',   // 보조 텍스트 (olive 팔레트 기반)
+  outlineColor: '#74796e',       // 흐린 텍스트 / 경계 (회색-올리브)
+
+  // Error / Danger container (M3 errorContainer scheme)
+  errorContainer: '#ffdad6',     // 에러 배경 (달라요 버튼 bg)
+  onErrorContainer: '#93000a',   // 에러 배경 위 텍스트
+
+  // Success container (M3 successContainer scheme)
+  successContainer: '#e6f4ea',   // 성공 배경 (맞아요 버튼 bg)
+  onSuccessContainer: '#1a7a3a', // 성공 배경 위 텍스트
+
+  // Surface variant (중간 배경)
+  surfaceVariant: '#dcdad5',     // 비활성 원 배지 배경
+
+  // Tertiary dark (on tertiary)
+  onTertiary: '#261a00',         // 황금 배지 위 텍스트
 
   // 그림자
   shadowBase: '#000000',

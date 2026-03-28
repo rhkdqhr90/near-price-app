@@ -38,7 +38,7 @@ export interface NaverReverseGeocodeResponse {
 export interface NaverGeocodeResponse {
   status: string;
   meta: { totalCount: number };
-  addresses: NaverGeocodeItem[];
+  addresses?: NaverGeocodeItem[];
 }
 
 export const naverMapsApi = {

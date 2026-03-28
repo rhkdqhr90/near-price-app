@@ -62,27 +62,33 @@ export const naverLocalApi = {
   // roadAddress: 목록 표시용 전체 주소 / jibunAddress: 저장용 지번 주소
   searchAddress: async (query: string): Promise<NaverGeocodeResult[]> => {
     const res = await naverMapsApi.geocode(query);
-    return (res.data.addresses ?? []).map(item => ({
-      roadAddress: item.roadAddress,
-      jibunAddress: item.jibunAddress,
-      x: item.x,
-      y: item.y,
-    }));
+    return (res.data.addresses ?? [])
+      .filter(item => item.x && item.y) // Naver API는 좌표 없는 결과를 빈 문자열로 반환할 수 있음
+      .map(item => ({
+        roadAddress: item.roadAddress,
+        jibunAddress: item.jibunAddress,
+        x: item.x,
+        y: item.y,
+      }));
   },
 
   searchKeyword: async (query: string, regionHint?: string): Promise<NaverPlaceDocument[]> => {
     // regionHint가 있으면 검색어에 동네 이름 추가 (위치 기반 검색 효과)
     const searchQuery = regionHint ? `${regionHint} ${query}` : query;
     const res = await apiClient.get<NaverLocalResponse>('/naver/search', {
-      params: { query: searchQuery, display: 10, sort: 'random' },
+      params: { query: searchQuery, display: 10, sort: 'sim' },
     });
-    return (res.data.items ?? []).map((item, index) => {
+    return (res.data.items ?? []).map((item) => {
       // Naver Search API mapx/mapy는 소수점 없는 정수 (경도/위도 × 1e7)
       const lng = (parseInt(item.mapx, 10) / 1e7).toFixed(7);
       const lat = (parseInt(item.mapy, 10) / 1e7).toFixed(7);
-      const name = item.title.replace(/<[^>]*>/g, '');
+      const name = item.title.replace(/<[^>]*>/g, '').replace(/&(amp|lt|gt|quot|#39);/g, (match, code: string) => {
+        const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+        return entities[code] ?? match;
+      });
+      // Naver Search API는 고유 ID를 제공하지 않으므로 이름 + 좌표로 결과 내 유일성 보장
       return {
-        id: `${index}_${name}_${lng}_${lat}`,
+        id: `naver_${name}_${lng}_${lat}`,
         name,
         category: item.category,
         address: item.address,

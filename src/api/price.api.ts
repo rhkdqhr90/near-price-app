@@ -5,8 +5,8 @@ export const priceApi = {
   getRecent: (page = 1, limit = 20) =>
     apiClient.get<PaginatedResponse<ProductPriceCard>>('/price/recent', { params: { page, limit } }),
 
-  getByProduct: (productId: string) =>
-    apiClient.get<PriceResponse[]>(`/price/product/${productId}`),
+  getByProduct: (productId: string, page = 1, limit = 20) =>
+    apiClient.get<PaginatedResponse<PriceResponse>>(`/price/product/${productId}`, { params: { page, limit } }),
 
   getByProductName: (name: string) =>
     apiClient.get<PriceResponse[]>('/price/by-name', { params: { name } }),

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NearbyStoreResponse } from '../../types/api.types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -13,9 +14,11 @@ interface Props {
   onDismiss: () => void;
 }
 
-const DetectedStoreSheet: React.FC<Props> = ({ store, onConfirm, onDismiss }) => (
+const DetectedStoreSheet: React.FC<Props> = ({ store, onConfirm, onDismiss }) => {
+  const insets = useSafeAreaInsets();
+  return (
   <View style={[styles.modal, styles.modalContainer]}>
-    <View style={styles.detectedWrap}>
+    <View style={[styles.detectedWrap, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.sm) }]}>
       <View style={styles.detectedTop}>
         <MapPinIcon size={18} color={colors.primary} />
         <Text style={styles.detectedLabel}>바로 여기 있어요</Text>
@@ -48,7 +51,8 @@ const DetectedStoreSheet: React.FC<Props> = ({ store, onConfirm, onDismiss }) =>
       </TouchableOpacity>
     </View>
   </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   modal: {
@@ -66,7 +70,6 @@ const styles = StyleSheet.create({
   detectedWrap: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
     backgroundColor: colors.white,
     borderTopLeftRadius: spacing.radiusMd,
     borderTopRightRadius: spacing.radiusMd,
