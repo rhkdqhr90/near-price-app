@@ -227,16 +227,18 @@ const NicknameModal: React.FC<NicknameModalProps> = ({
             accessibilityLabel="닉네임 입력"
           />
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
-
-          {checkingNickname && (
-            <View style={styles.checkingContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.checkingText}>중복 확인 중...</Text>
-            </View>
-          )}
-
           <Text style={styles.helperText}>한글, 영문, 숫자 2~6자</Text>
+
+          <View style={styles.feedbackContainer}>
+            {error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : checkingNickname ? (
+              <View style={styles.checkingInner}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.checkingText}>중복 확인 중...</Text>
+              </View>
+            ) : null}
+          </View>
 
           <View style={styles.modalButtons}>
             <TouchableOpacity
@@ -962,18 +964,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     ...typography.body,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  feedbackContainer: {
+    minHeight: 28,
+    marginBottom: spacing.lg,
+    justifyContent: 'center',
   },
   errorText: {
     ...typography.bodySm,
     color: colors.danger,
-    marginBottom: spacing.md,
   },
-  checkingContainer: {
+  checkingInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.md,
   },
   checkingText: {
     ...typography.bodySm,
@@ -982,7 +987,7 @@ const styles = StyleSheet.create({
   helperText: {
     ...typography.caption,
     color: colors.gray600,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   modalButtons: {
     flexDirection: 'row',

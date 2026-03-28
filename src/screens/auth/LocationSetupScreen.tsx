@@ -242,7 +242,7 @@ const LocationSetupScreen: React.FC = () => {
             {isGpsLoading ? (
               <ActivityIndicator color={colors.primary} size="small" accessibilityLabel="위치 감지 중" />
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <View style={styles.gpsButtonInner}>
                 <MapPinIcon size={spacing.iconSm} color={colors.primary} />
                 <Text style={styles.gpsButtonText}>현재 위치 자동 감지</Text>
               </View>
@@ -418,6 +418,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     marginBottom: spacing.md,
     minHeight: 48,
+  },
+  gpsButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   gpsButtonText: {
     ...typography.headingMd,

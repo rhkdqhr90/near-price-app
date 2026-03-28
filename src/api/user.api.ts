@@ -2,6 +2,7 @@ import { apiClient } from './client';
 import type {
   UserResponse,
   UpdateNicknameDto,
+  UpdateNotificationSettingsDto,
   CheckNicknameResponseDto,
   SuccessResponse,
 } from '../types/api.types';
@@ -22,8 +23,8 @@ export const userApi = {
 
   checkNicknameAvailable: async (nickname: string, signal?: AbortSignal) => {
     const response = await apiClient.get<CheckNicknameResponseDto>(
-      `/user/check-nickname?nickname=${encodeURIComponent(nickname)}`,
-      { signal },
+      '/user/check-nickname',
+      { params: { nickname }, signal },
     );
     return response.data;
   },
@@ -43,7 +44,7 @@ export const userApi = {
 
   updateNotificationSettings: async (
     userId: string,
-    settings: { notifPriceChange?: boolean; notifPromotion?: boolean },
+    settings: UpdateNotificationSettingsDto,
   ) => {
     const response = await apiClient.patch<SuccessResponse>(
       `/user/${userId}/notification-settings`,

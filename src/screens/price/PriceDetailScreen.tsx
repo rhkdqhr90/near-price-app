@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,29 +13,65 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-// PriceDetail은 HomeStackParamList에 등록된 화면이므로 HomeScreenProps 사용이 올바름
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HomeScreenProps } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
+import { typography, PJS } from '../../theme/typography';
 import { formatPrice, formatRelativeTime, fixImageUrl, formatDate } from '../../utils/format';
 import EmptyState from '../../components/common/EmptyState';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
+import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
+import ChevronRightIcon from '../../components/icons/ChevronRightIcon';
+import SearchIcon from '../../components/icons/SearchIcon';
+import ShareIcon from '../../components/icons/ShareIcon';
+import MapPinIcon from '../../components/icons/MapPinIcon';
 import { useVerifications, useVerifyPrice } from '../../hooks/queries/useVerification';
-import { usePriceDetail } from '../../hooks/queries/usePrices';
+import { usePriceDetail, useProductPricesByName } from '../../hooks/queries/usePrices';
 import { usePriceTrustScore } from '../../hooks/queries/usePriceTrustScore';
 import { useToastStore } from '../../store/toastStore';
 import { useAuthStore } from '../../store/authStore';
+import { useLocationStore } from '../../store/locationStore';
+import { isAxiosError } from '../../api/client';
+import type { ProductCategory } from '../../types/api.types';
 
 type Props = HomeScreenProps<'PriceDetail'>;
+
+const HORIZONTAL_PADDING = spacing.xxl; // 24
+
+const CATEGORY_LABELS: Record<ProductCategory, string> = {
+  vegetable: '채소',
+  fruit: '과일',
+  meat: '육류',
+  seafood: '해산물',
+  dairy: '유제품',
+  grain: '곡류',
+  processed: '가공식품',
+  household: '생활용품',
+  other: '기타',
+};
+
+const WEEK_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { priceId } = route.params;
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputePrice, setDisputePrice] = useState('');
+  const [disputeError, setDisputeError] = useState<string | null>(null);
   const showToast = useToastStore((s) => s.showToast);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const regionName = useLocationStore((s) => s.regionName);
+  const insets = useSafeAreaInsets();
+
+  const bottomSpacerStyle = useMemo(
+    () => ({ height: spacing.xxl + insets.bottom }),
+    [insets.bottom],
+  );
+
+  const headerDynamicStyle = useMemo(
+    () => [styles.header, { paddingTop: insets.top }],
+    [insets.top],
+  );
 
   const {
     data: price,
@@ -48,6 +84,27 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { data: trustScore } = usePriceTrustScore(priceId);
   const { mutate: verifyPrice, isPending: isVerifying } = useVerifyPrice(priceId);
 
+  const { data: allPricesData, isLoading: isRankLoading } = useProductPricesByName(price?.product.name ?? '');
+
+  const rankedPrices = useMemo(() => {
+    if (!allPricesData) return [];
+    return [...allPricesData].sort((a, b) => a.price - b.price);
+  }, [allPricesData]);
+
+  const currentRank = useMemo<number | null>(() => {
+    if (!allPricesData) return null;
+    const idx = rankedPrices.findIndex(p => p.id === priceId);
+    return idx >= 0 ? idx + 1 : null;
+  }, [allPricesData, rankedPrices, priceId]);
+
+  const otherTop2 = useMemo(
+    () => rankedPrices
+      .map((p, idx) => ({ price: p, rank: idx + 1 }))
+      .filter(({ price: p }) => p.id !== priceId)
+      .slice(0, 2),
+    [rankedPrices, priceId],
+  );
+
   const handleStorePress = useCallback(() => {
     if (price?.store.id) {
       navigation.navigate('StoreDetail', { storeId: price.store.id });
@@ -58,10 +115,15 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     (v) => v.verifier?.id === currentUserId,
   ) ?? false;
 
+  const isOwnPrice = !!currentUserId && price?.user?.id === currentUserId;
+
   const handleConfirmPrice = useCallback(() => {
     verifyPrice(
       { result: 'confirmed' },
       {
+        onSuccess: () => {
+          showToast('가격을 확인했어요!', 'success');
+        },
         onError: () => {
           showToast('가격 확인 처리에 실패했습니다.', 'error');
         },
@@ -72,50 +134,60 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleDisputeSubmit = useCallback(() => {
     const trimmed = disputePrice.trim();
     if (!/^\d+$/.test(trimmed)) {
-      showToast('숫자만 입력해 주세요', 'error');
+      setDisputeError('숫자만 입력해 주세요');
       return;
     }
     const actualPrice = parseInt(trimmed, 10);
     if (actualPrice <= 0) {
-      showToast('0원보다 큰 가격을 입력해 주세요', 'error');
+      setDisputeError('0원보다 큰 가격을 입력해 주세요');
       return;
     }
     if (actualPrice > 10_000_000) {
-      showToast('10,000,000원 이하로 입력해 주세요', 'error');
+      setDisputeError('10,000,000원 이하로 입력해 주세요');
       return;
     }
+    setDisputeError(null);
     verifyPrice(
-        { result: 'disputed', actualPrice },
-        {
-          onSuccess: () => {
-            setShowDisputeModal(false);
-            setDisputePrice('');
-          },
-          onError: () => {
-            showToast('이의 제기에 실패했어요', 'error');
-          },
+      { result: 'disputed', actualPrice },
+      {
+        onSuccess: () => {
+          setShowDisputeModal(false);
+          setDisputePrice('');
+          setDisputeError(null);
+          showToast('이의 제기가 등록되었어요', 'success');
         },
-      );
+        onError: (err) => {
+          const msg = isAxiosError<{ message?: string }>(err)
+            ? err.response?.data?.message
+            : undefined;
+          setDisputeError(msg ?? '이의 제기에 실패했어요');
+        },
+      },
+    );
   }, [disputePrice, verifyPrice, showToast]);
 
   const handleShare = useCallback(async () => {
     if (!price) return;
     try {
       const message = `[마실] ${price.product.name} ${formatPrice(price.price)} - ${price.store.name}\n${price.store.address}\n내 동네 최저가를 찾아보세요!`;
-      await Share.share({
-        message,
-      });
+      await Share.share({ message });
     } catch {
       showToast('공유할 수 없어요', 'error');
     }
   }, [price, showToast]);
 
+  // ─── Loading State ───────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← 뒤로</Text>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로 가기"
+          >
+            <ChevronLeftIcon size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
@@ -125,12 +197,18 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
+  // ─── Error State ─────────────────────────────────────────────────────────────
   if (isError || !price) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← 뒤로</Text>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로 가기"
+          >
+            <ChevronLeftIcon size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
         <EmptyState
@@ -144,259 +222,329 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   const imageUri = fixImageUrl(price.imageUrl);
+  const hasSale = !!(price.saleStartDate && price.saleEndDate);
+  const categoryLabel = CATEGORY_LABELS[price.product.category] ?? '기타';
+  const priceInt = Math.floor(price.price);
+  const priceFormatted = priceInt.toLocaleString('ko-KR');
+  const verificationList = verifications?.data ?? [];
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* 헤더 */}
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* ─── Sticky Header ───────────────────────────────────────────────── */}
+      <View style={headerDynamicStyle}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.headerIconBtn}
           onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="뒤로 가기"
         >
-          <Text style={styles.backButtonText}>← 뒤로</Text>
+          <ChevronLeftIcon size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{price.product.name}</Text>
-        <View style={styles.backButton} />
-      </View>
 
-      {/* 콘텐츠 */}
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        bounces={true}
-      >
-        {/* 가격표 사진 */}
-        {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.priceImage}
-            resizeMode="cover"
-            accessible={true}
-            accessibilityLabel={`${price.product.name} 가격표 사진`}
-          />
-        ) : (
-          <View style={styles.priceImagePlaceholder} accessible={true} accessibilityLabel="사진 없음">
-            <Text style={styles.placeholderText}>사진 없음</Text>
-          </View>
-        )}
-
-        {/* 가격 크게 표시 */}
-        <View style={styles.priceSection}>
-          <Text style={styles.priceText}>{formatPrice(price.price)}</Text>
-          {price.quantity ? (
-            <Text style={styles.priceQuantity}>{price.quantity}개</Text>
-          ) : null}
-        </View>
-
-        {/* 등록자 정보 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>등록자</Text>
-          <View style={styles.sectionRow}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {(price.user?.nickname || price.user?.email || '?')[0]}
-              </Text>
-            </View>
-            <View style={styles.sectionRowContent}>
-              <Text style={styles.sectionValue}>
-                {price.user?.nickname || price.user?.email || '익명'}
-              </Text>
-              {price.user && (
-                <Text style={styles.sectionSubValue}>
-                  신뢰도 {price.user.trustScore}점
-                </Text>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* 매장 정보 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>매장</Text>
-          <Text style={styles.storeName}>{price.store.name}</Text>
-          <Text style={styles.storeAddress}>{price.store.address}</Text>
-        </View>
-
-        {/* 가격 신뢰도 */}
-        {(price.verificationCount > 0 || price.trustScore !== null || trustScore) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>가격 신뢰도</Text>
-            {trustScore && (
-              <View style={styles.trustStatusRow}>
-                <View style={[
-                  styles.trustStatusBadge,
-                  trustScore.status === 'scored' && styles.trustStatusScored,
-                  trustScore.status === 'verifying' && styles.trustStatusVerifying,
-                  trustScore.status === 'new' && styles.trustStatusNew,
-                ]}>
-                  <Text style={[
-                    styles.trustStatusText,
-                    trustScore.status === 'scored' && styles.trustStatusTextScored,
-                    trustScore.status === 'verifying' && styles.trustStatusTextVerifying,
-                    trustScore.status === 'new' && styles.trustStatusTextNew,
-                  ]}>
-                    {trustScore.status === 'scored' && (
-                      trustScore.trustScore !== null
-                        ? `신뢰도 ${Math.round(trustScore.trustScore)}%`
-                        : '신뢰도 계산 중'
-                    )}
-                    {trustScore.status === 'verifying' && '검증 중'}
-                    {trustScore.status === 'new' && '신규 등록'}
-                  </Text>
-                </View>
-                {trustScore.isStale && (
-                  <Text style={styles.staleText}>오래된 정보일 수 있어요</Text>
-                )}
-              </View>
-            )}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <Text style={styles.trustBadgeText}>
-                  확인 {price.confirmedCount}
-                </Text>
-              </View>
-              <View style={[styles.trustBadge, styles.trustBadgeDisputed]}>
-                <Text style={[styles.trustBadgeText, styles.trustBadgeDisputedText]}>
-                  이의 {price.disputedCount}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* 가격 검증 섹션 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>이 가격이 맞나요?</Text>
-
-          {isVerifying ? (
-            <View style={styles.loadingButtonContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingButtonText}>검증 중...</Text>
-            </View>
-          ) : hasVerified ? (
-            <View style={styles.verifiedStateContainer}>
-              <Text style={styles.verifiedStateText}>검증에 참여했어요 ✓</Text>
-            </View>
-          ) : (
-            <View style={styles.verificationButtonRow}>
-              <TouchableOpacity
-                style={[styles.verificationButton, styles.confirmButton]}
-                onPress={handleConfirmPrice}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="가격이 맞아요"
-              >
-                <Text style={styles.verificationButtonText}>맞아요 ✓</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.verificationButton, styles.disputeButton]}
-                onPress={() => setShowDisputeModal(true)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="가격이 달라요"
-              >
-                <Text style={styles.verificationButtonTextDispute}>달라요 ✗</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* 검증자 목록 */}
-          {verifications && verifications.data && verifications.data.length > 0 && (
-            <View style={styles.verifiersContainer}>
-              <Text style={styles.verifiersTitle}>검증자 ({verifications.meta.total}명)</Text>
-              {verifications.data.map((verification, index) => (
-                <View key={verification.id} style={[styles.verifierItem, index === verifications.data.length - 1 && styles.verifierItemLast]}>
-                  <View style={styles.verifierAvatarCircle}>
-                    <Text style={styles.verifierAvatarText}>
-                      {(verification.verifier?.nickname || '?')[0]}
-                    </Text>
-                  </View>
-                  <View style={styles.verifierInfo}>
-                    <Text style={styles.verifierName}>{verification.verifier?.nickname}</Text>
-                    <Text style={styles.verifierTrust}>신뢰도 {verification.verifier?.trustScore}점</Text>
-                  </View>
-                  <View style={[
-                    styles.verificationBadge,
-                    verification.result === 'confirmed'
-                      ? styles.verificationBadgeConfirmed
-                      : styles.verificationBadgeDisputed,
-                  ]}>
-                    <Text style={[
-                      styles.verificationBadgeText,
-                      verification.result === 'confirmed'
-                        ? styles.verificationBadgeTextConfirmed
-                        : styles.verificationBadgeTextDisputed,
-                    ]}>
-                      {verification.result === 'confirmed' ? '맞아요' : '달라요'}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* 상품 상태 */}
-        {price.condition ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>상품 상태</Text>
-            <Text style={styles.sectionValue}>{price.condition}</Text>
-          </View>
-        ) : null}
-
-        {/* 세일 기간 */}
-        {(price.saleStartDate || price.saleEndDate) ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>세일 기간</Text>
-            <Text style={styles.sectionValue}>
-              {price.saleStartDate && formatDate(price.saleStartDate)}
-              {price.saleStartDate && price.saleEndDate && ' ~ '}
-              {price.saleEndDate && formatDate(price.saleEndDate)}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* 등록 일시 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>등록 일시</Text>
-          <Text style={styles.sectionValue}>{formatRelativeTime(price.createdAt)}</Text>
-          <Text style={styles.sectionSubValue}>
-            {new Date(price.createdAt).toLocaleString('ko-KR', {
-              year: 'numeric', month: '2-digit', day: '2-digit',
-              hour: '2-digit', minute: '2-digit',
-            })}
+        <View style={styles.headerCenter}>
+          <MapPinIcon size={14} color={colors.primary} />
+          <Text style={styles.headerLocationText} numberOfLines={1}>
+            {regionName ?? '동네'}
           </Text>
         </View>
 
-        {/* 공유하기 버튼 */}
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={handleShare}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="공유하기"
-        >
-          <Text style={styles.shareButtonText}>공유하기</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
+            accessibilityRole="button"
+            accessibilityLabel="검색"
+          >
+            <SearchIcon size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="공유하기"
+          >
+            <ShareIcon size={22} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        {/* 매장 보기 버튼 */}
-        <TouchableOpacity
-          style={styles.storeButton}
-          onPress={handleStorePress}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="매장 상세 정보 보기"
-        >
-          <Text style={styles.storeButtonText}>매장 보기</Text>
-        </TouchableOpacity>
+      {/* ─── Scroll Content ──────────────────────────────────────────────── */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces
+      >
+        {/* ─── 상품 이미지 ─────────────────────────────────────────────── */}
+        <View style={styles.imageWrapper}>
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.productImage}
+              resizeMode="cover"
+              accessible
+              accessibilityLabel={`${price.product.name} 가격표 사진`}
+            />
+          ) : (
+            <View style={styles.imagePlaceholder} accessible accessibilityLabel="사진 없음">
+              <Text style={styles.imagePlaceholderText}>사진 없음</Text>
+            </View>
+          )}
+        </View>
 
-        <View style={styles.bottomPadding} />
+        {/* ─── 상품 정보 ───────────────────────────────────────────────── */}
+        <View style={styles.productInfoSection}>
+          {/* 배지 row */}
+          <View style={styles.badgeRow}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>{categoryLabel}</Text>
+            </View>
+            {hasSale && (
+              <View style={styles.saleBadge}>
+                <Text style={styles.saleBadgeText}>할인 중</Text>
+              </View>
+            )}
+          </View>
+
+          {/* 상품명 */}
+          <Text style={styles.productName} numberOfLines={2}>
+            {price.product.name}
+          </Text>
+
+          {/* 가격 */}
+          <View style={styles.priceRow}>
+            <Text style={styles.priceNumber}>{priceFormatted}</Text>
+            <Text style={styles.priceUnit}>원</Text>
+          </View>
+
+          {/* 메타 */}
+          <Text style={styles.metaText}>
+            {price.store.name}
+            {' · '}
+            {formatRelativeTime(price.createdAt)}
+            {price.verificationCount > 0 ? ` · 검증 ${price.verificationCount}명` : ''}
+          </Text>
+
+          {/* 맞아요/달라요 버튼 — 본인 등록 아닐 때만 */}
+          {!isOwnPrice && (
+            <View style={styles.verifyBtnRow}>
+              {isVerifying ? (
+                <View style={styles.verifyingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.verifyingText}>검증 중...</Text>
+                </View>
+              ) : hasVerified ? (
+                <View style={styles.verifiedContainer}>
+                  <Text style={styles.verifiedText}>검증에 참여했어요 ✓</Text>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, styles.confirmBtn]}
+                    onPress={handleConfirmPrice}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="가격이 맞아요"
+                  >
+                    <Text style={styles.confirmBtnText}>맞아요 ✓</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, styles.disputeBtn]}
+                    onPress={() => setShowDisputeModal(true)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="가격이 달라요"
+                  >
+                    <Text style={styles.disputeBtnText}>달라요 ✗</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* ─── 7일 가격 트렌드 카드 ────────────────────────────────────── */}
+        <View style={styles.card}>
+          <View style={styles.trendHeader}>
+            <Text style={styles.cardTitle}>7일 가격 트렌드</Text>
+            {trustScore && (
+              <Text style={styles.trendSubLabel}>
+                30일 최저가 {trustScore.status === 'scored' ? formatPrice(price.price) : '-'}
+              </Text>
+            )}
+          </View>
+          <View style={styles.chartPlaceholder} />
+          <View style={styles.weekDayRow}>
+            {WEEK_DAYS.map((d) => (
+              <Text key={d} style={styles.weekDayLabel}>{d}</Text>
+            ))}
+          </View>
+        </View>
+
+        {/* ─── 매장 가격 순위 카드 ─────────────────────────────────────── */}
+        <View style={styles.card}>
+          <Text style={styles.rankSectionTitle}>매장 가격 순위</Text>
+
+          {/* 현재 매장 (실제 순위) */}
+          <View style={styles.rank1Card}>
+            <View style={styles.rank1TopRow}>
+              <View style={styles.rank1NumCircle}>
+                <Text style={styles.rank1NumText}>{currentRank ?? '-'}</Text>
+              </View>
+              {currentRank === 1 && (
+                <View style={styles.lowestBadge}>
+                  <Text style={styles.lowestBadgeText}>최저가</Text>
+                </View>
+              )}
+            </View>
+
+            {/* 매장 정보 + 가격 가로 배치 */}
+            <View style={styles.rank1MidRow}>
+              <View style={styles.rank1StoreInfo}>
+                <Text style={styles.rank1StoreName}>{price.store.name}</Text>
+                <Text style={styles.rank1SubText} numberOfLines={1}>
+                  {price.store.address}
+                </Text>
+              </View>
+              <View style={styles.rank1PriceBlock}>
+                <Text style={styles.rank1Price}>{formatPrice(price.price)}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.directionsBtn}
+              onPress={handleStorePress}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="매장 상세 보기"
+            >
+              <Text style={styles.directionsBtnText}>매장 상세 보기</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 다른 매장 순위 */}
+          <View style={styles.rank23Row}>
+            {isRankLoading ? (
+              [2, 3].map((rank) => (
+                <View key={rank} style={styles.rank23Card}>
+                  <View style={styles.rank23Left}>
+                    <View style={styles.rank23NumCircle}>
+                      <Text style={styles.rank23NumText}>{rank}</Text>
+                    </View>
+                    <View style={styles.rank23TextBlock}>
+                      <Text style={styles.rank23StoreName}>-</Text>
+                      <Text style={styles.rank23SubText}>불러오는 중...</Text>
+                    </View>
+                  </View>
+                  <ChevronRightIcon size={18} color={colors.gray400} />
+                </View>
+              ))
+            ) : otherTop2.length > 0 ? (
+              otherTop2.map(({ price: otherPrice, rank }) => (
+                <TouchableOpacity
+                  key={otherPrice.id}
+                  style={styles.rank23Card}
+                  onPress={() => navigation.navigate('PriceDetail', { priceId: otherPrice.id })}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${rank}위 ${otherPrice.store.name} 가격 상세 보기`}
+                >
+                  <View style={styles.rank23Left}>
+                    <View style={styles.rank23NumCircle}>
+                      <Text style={styles.rank23NumText}>{rank}</Text>
+                    </View>
+                    <View style={styles.rank23TextBlock}>
+                      <Text style={styles.rank23StoreName}>{otherPrice.store.name}</Text>
+                      <Text style={styles.rank23SubText}>{formatPrice(otherPrice.price)}</Text>
+                    </View>
+                  </View>
+                  <ChevronRightIcon size={18} color={colors.gray400} />
+                </TouchableOpacity>
+              ))
+            ) : (
+              [
+                { rank: 2, label: '다른 매장을 검색해 보세요' },
+                { rank: 3, label: '가격을 등록해 보세요' },
+              ].map(({ rank, label }) => (
+                <View key={rank} style={styles.rank23Card}>
+                  <View style={styles.rank23Left}>
+                    <View style={styles.rank23NumCircle}>
+                      <Text style={styles.rank23NumText}>{rank}</Text>
+                    </View>
+                    <View style={styles.rank23TextBlock}>
+                      <Text style={styles.rank23StoreName}>-</Text>
+                      <Text style={styles.rank23SubText}>{label}</Text>
+                    </View>
+                  </View>
+                  <ChevronRightIcon size={18} color={colors.gray400} />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* ─── 가격 인증 현황 카드 ─────────────────────────────────────── */}
+        {(!isOwnPrice || verificationList.length > 0) && (
+          <View style={[styles.card, styles.cardLast]}>
+            <Text style={styles.cardTitle}>가격 인증 현황</Text>
+
+            {verificationList.length === 0 ? (
+              <Text style={styles.noVerificationText}>아직 인증한 사람이 없어요</Text>
+            ) : (
+              verificationList.map((v, idx) => (
+                <View
+                  key={v.id}
+                  style={[
+                    styles.verificationItem,
+                    idx < verificationList.length - 1 && styles.verificationItemBorder,
+                  ]}
+                >
+                  <View style={styles.verificationAvatar}>
+                    <Text style={styles.verificationAvatarText}>
+                      {(v.verifier?.nickname ?? '?')[0]}
+                    </Text>
+                  </View>
+                  <View style={styles.verificationInfo}>
+                    <Text style={styles.verificationName}>
+                      {v.verifier?.nickname ?? '알 수 없음'}
+                    </Text>
+                    <Text style={styles.verificationTime}>
+                      {formatRelativeTime(v.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={[
+                    styles.verificationResultBadge,
+                    v.result === 'confirmed' ? styles.confirmedResultBadge : styles.disputedResultBadge,
+                  ]}>
+                    <Text style={[
+                      styles.verificationResultText,
+                      v.result === 'confirmed' ? styles.confirmedResultText : styles.disputedResultText,
+                    ]}>
+                      {v.result === 'confirmed' ? '맞아요' : '달라요'}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* 세일 기간 정보 (있을 때) */}
+        {(price.saleStartDate || price.saleEndDate) && (
+          <View style={[styles.card, styles.cardLast]}>
+            <Text style={styles.cardTitle}>세일 기간</Text>
+            <Text style={styles.saleText}>
+              {price.saleStartDate ? formatDate(price.saleStartDate) : ''}
+              {price.saleStartDate && price.saleEndDate ? ' ~ ' : ''}
+              {price.saleEndDate ? formatDate(price.saleEndDate) : ''}
+            </Text>
+          </View>
+        )}
+
+        <View style={bottomSpacerStyle} />
       </ScrollView>
 
-      {/* 달라요 모달 */}
+      {/* ─── Dispute Modal ───────────────────────────────────────────────── */}
       <Modal
         visible={showDisputeModal}
         transparent
@@ -404,6 +552,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         onRequestClose={() => {
           setShowDisputeModal(false);
           setDisputePrice('');
+          setDisputeError(null);
         }}
       >
         <KeyboardAvoidingView
@@ -416,7 +565,10 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             onPress={() => {
               setShowDisputeModal(false);
               setDisputePrice('');
+              setDisputeError(null);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="모달 닫기"
           />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
@@ -430,36 +582,48 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               placeholderTextColor={colors.gray400}
               keyboardType="number-pad"
               value={disputePrice}
-              onChangeText={setDisputePrice}
+              onChangeText={(v) => {
+                setDisputePrice(v);
+                if (disputeError) setDisputeError(null);
+              }}
               autoFocus
               accessibilityLabel="실제 가격 입력"
             />
+            {disputeError ? (
+              <Text style={styles.disputeErrorText}>{disputeError}</Text>
+            ) : null}
             <View style={styles.modalButtonRow}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
+                style={[styles.modalBtn, styles.modalCancelBtn]}
                 onPress={() => {
                   setShowDisputeModal(false);
                   setDisputePrice('');
+                  setDisputeError(null);
                 }}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="취소"
               >
-                <Text style={styles.modalCancelButtonText}>취소</Text>
+                <Text style={styles.modalCancelBtnText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  styles.modalButton,
-                  styles.modalSubmitButton,
-                  (!disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())) && styles.modalButtonDisabled,
+                  styles.modalBtn,
+                  styles.modalSubmitBtn,
+                  (isVerifying || !disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())) &&
+                    styles.modalBtnDisabled,
                 ]}
                 onPress={handleDisputeSubmit}
-                disabled={!disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())}
+                disabled={isVerifying || !disputePrice.trim() || !/^\d+$/.test(disputePrice.trim())}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="이의 제기 제출"
               >
-                <Text style={styles.modalSubmitButtonText}>제출</Text>
+                {isVerifying ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSubmitBtnText}>제출</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -472,272 +636,441 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
   },
+
+  // ─── Header ───────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: spacing.borderThin,
-    borderBottomColor: colors.gray200,
+    borderBottomColor: colors.surfaceContainerLow,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  backButton: {
-    width: spacing.backBtnWidth,
-    paddingVertical: spacing.sm,
+  headerIconBtn: {
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButtonText: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '500' as const,
-  },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
-    ...typography.headingLg,
-    textAlign: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
+  headerLocationText: {
+    ...typography.headingMd,
+    fontFamily: PJS.bold,
+    color: colors.primary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // ─── Loading / Error ───────────────────────────────────────────────────────
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ─── Scroll ───────────────────────────────────────────────────────────────
   scrollView: {
     flex: 1,
+    backgroundColor: colors.surface,
   },
-  priceImage: {
-    width: '100%',
-    height: spacing.priceImageHeight,
-    backgroundColor: colors.gray100,
+  scrollContent: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: spacing.lg,
   },
-  priceImagePlaceholder: {
+
+  // ─── 상품 이미지 ───────────────────────────────────────────────────────────
+  imageWrapper: {
+    aspectRatio: 1,
+    borderRadius: spacing.radiusLg,
+    overflow: 'hidden',
+    marginBottom: spacing.xxl,
+    backgroundColor: colors.surfaceContainerLow,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowOpacity: 0.10,
+    shadowRadius: spacing.shadowRadiusXl,
+    elevation: 3,
+  },
+  productImage: {
     width: '100%',
-    height: spacing.priceImagePlaceholderHeight,
-    backgroundColor: colors.gray100,
+    height: '100%',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.surfaceContainerLow,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderText: {
+  imagePlaceholderText: {
     ...typography.bodySm,
     color: colors.gray400,
   },
-  priceSection: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xl,
+
+  // ─── 상품 정보 섹션 ────────────────────────────────────────────────────────
+  productInfoSection: {
+    marginBottom: spacing.md,
+  },
+  badgeRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    borderBottomWidth: spacing.dividerThick,
-    borderBottomColor: colors.gray100,
-  },
-  priceText: {
-    ...typography.price,
-  },
-  priceQuantity: {
-    ...typography.body,
-    color: colors.gray600,
-  },
-  section: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: spacing.borderThin,
-    borderBottomColor: colors.gray100,
-  },
-  sectionTitle: {
-    ...typography.bodySm,
-    fontWeight: '600' as const,
-    color: colors.gray400,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  sectionRowContent: {
-    flex: 1,
-  },
-  avatarCircle: {
-    width: spacing.headerIconSize,
-    height: spacing.headerIconSize,
-    borderRadius: spacing.headerIconSize / 2,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    ...typography.headingMd,
-    color: colors.primary,
-  },
-  sectionValue: {
-    ...typography.body,
-    color: colors.black,
-  },
-  sectionSubValue: {
-    ...typography.bodySm,
-    color: colors.gray600,
-    marginTop: spacing.micro,
-  },
-  storeName: {
-    ...typography.headingMd,
-    color: colors.black,
-    marginBottom: spacing.xs,
-  },
-  storeAddress: {
-    ...typography.bodySm,
-    color: colors.gray600,
-  },
-  trustStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  trustStatusBadge: {
+  categoryBadge: {
+    backgroundColor: colors.tertiaryContainer,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: spacing.radiusFull,
   },
-  trustStatusScored: {
-    backgroundColor: colors.successLight,
-  },
-  trustStatusVerifying: {
-    backgroundColor: colors.primaryLight,
-  },
-  trustStatusNew: {
-    backgroundColor: colors.gray100,
-  },
-  trustStatusText: {
+  categoryBadgeText: {
     ...typography.captionBold,
+    color: colors.onTertiaryContainer,
   },
-  trustStatusTextScored: {
-    color: colors.success,
-  },
-  trustStatusTextVerifying: {
-    color: colors.primary,
-  },
-  trustStatusTextNew: {
-    color: colors.gray600,
-  },
-  staleText: {
-    ...typography.caption,
-    color: colors.warning,
-  },
-  trustRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  trustBadge: {
-    backgroundColor: colors.primaryLight,
+  saleBadge: {
+    backgroundColor: colors.errorContainer,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: spacing.radiusFull,
   },
-  trustBadgeText: {
-    ...typography.bodySm,
-    fontWeight: '600' as const,
+  saleBadgeText: {
+    ...typography.captionBold,
+    color: colors.onErrorContainer,
+  },
+  productName: {
+    ...typography.productDetailTitle,
     color: colors.primary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  trustBadgeDisputed: {
-    backgroundColor: colors.dangerLight,
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
   },
-  trustBadgeDisputedText: {
-    color: colors.danger,
+  priceNumber: {
+    ...typography.priceHero,
+    color: colors.onBackground,
   },
-  shareButton: {
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.xl,
-    marginBottom: spacing.md,
-    backgroundColor: colors.gray100,
-    borderRadius: spacing.radiusMd,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    borderWidth: spacing.borderThin,
-    borderColor: colors.gray200,
+  priceUnit: {
+    ...typography.priceHeroUnit,
+    color: colors.onSurfaceVariant,
+    alignSelf: 'flex-end',
+    paddingBottom: spacing.xs,
   },
-  shareButtonText: {
-    ...typography.headingMd,
-    color: colors.gray700,
+  metaText: {
+    ...typography.labelSm,
+    color: colors.outlineColor,
+    marginTop: spacing.xs,
   },
-  storeButton: {
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
-    backgroundColor: colors.primary,
-    borderRadius: spacing.radiusMd,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-  },
-  storeButtonText: {
-    ...typography.headingMd,
-    color: colors.white,
-  },
-  bottomPadding: {
-    height: spacing.xxl,
-  },
-  verificationButtonRow: {
+
+  // ─── 맞아요/달라요 버튼 ────────────────────────────────────────────────────
+  verifyBtnRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    marginTop: spacing.xl,
   },
-  verificationButton: {
+  verifyBtn: {
     flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: spacing.radiusMd,
+    borderRadius: spacing.radiusLg,
+    paddingVertical: spacing.inputPad,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  confirmButton: {
-    backgroundColor: colors.primary,
+  confirmBtn: {
+    backgroundColor: colors.successContainer,
   },
-  disputeButton: {
-    backgroundColor: colors.dangerLight,
-    borderWidth: spacing.borderEmphasis,
-    borderColor: colors.danger,
+  confirmBtnText: {
+    ...typography.labelMd,
+    color: colors.onSuccessContainer,
   },
-  verificationButtonText: {
-    ...typography.headingMd,
-    color: colors.white,
-    fontWeight: '600' as const,
+  disputeBtn: {
+    backgroundColor: colors.errorContainer,
   },
-  verificationButtonTextDispute: {
-    ...typography.headingMd,
-    color: colors.danger,
-    fontWeight: '600' as const,
+  disputeBtnText: {
+    ...typography.labelMd,
+    color: colors.onErrorContainer,
   },
-  loadingButtonContainer: {
+  verifyingContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
     gap: spacing.sm,
+    paddingVertical: spacing.inputPad,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: spacing.radiusLg,
   },
-  loadingButtonText: {
+  verifyingText: {
     ...typography.body,
     color: colors.primary,
   },
-  verifiedStateContainer: {
+  verifiedContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.inputPad,
+    backgroundColor: colors.primaryLight,
+    borderRadius: spacing.radiusLg,
+  },
+  verifiedText: {
+    ...typography.labelMd,
+    color: colors.primary,
+  },
+
+  // ─── 공통 카드 ────────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: spacing.radiusLg,
+    padding: spacing.xl,
+    marginBottom: spacing.md,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetY },
+    shadowOpacity: 0.06,
+    shadowRadius: spacing.shadowRadiusMd,
+    elevation: 2,
+  },
+  cardLast: {
+    marginBottom: 0,
+  },
+  cardTitle: {
+    ...typography.labelMd,
+    color: colors.primary,
+    marginBottom: spacing.md,
+  },
+
+  // ─── 7일 가격 트렌드 ──────────────────────────────────────────────────────
+  trendHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  trendSubLabel: {
+    ...typography.caption,
+    color: colors.tertiary,
+  },
+  chartPlaceholder: {
+    height: spacing.priceDetailChartH,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: spacing.radiusSm,
+    marginBottom: spacing.sm,
+  },
+  weekDayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  weekDayLabel: {
+    ...typography.tabLabel,
+    fontFamily: PJS.semiBold,
+    color: colors.outlineColor,
+  },
+
+  // ─── 매장 가격 순위 ───────────────────────────────────────────────────────
+  rankSectionTitle: {
+    ...typography.headingLg,
+    fontFamily: PJS.extraBold,
+    color: colors.primary,
+    marginBottom: spacing.md,
+  },
+  rank1Card: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderWidth: spacing.borderEmphasis,
+    borderColor: colors.tertiaryFixedDim,
+    borderRadius: spacing.radiusLg,
+    padding: spacing.xxl,
+    marginBottom: spacing.md,
+  },
+  rank1TopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  rank1NumCircle: {
+    width: spacing.headerIconSize,
+    height: spacing.headerIconSize,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: colors.tertiaryFixedDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rank1NumText: {
+    ...typography.activityCount,
+    fontFamily: PJS.extraBold,
+    color: colors.onTertiary,
+  },
+  lowestBadge: {
+    backgroundColor: colors.tertiary,
+    paddingHorizontal: spacing.badgePadH,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.radiusFull,
+  },
+  lowestBadgeText: {
+    ...typography.captionBold,
+    color: colors.white,
+  },
+  rank1StoreName: {
+    ...typography.headingLg,
+    color: colors.onBackground,
+    marginBottom: spacing.xs,
+  },
+  rank1SubText: {
+    ...typography.labelMd,
+    color: colors.onSurfaceVariant,
+  },
+  rank1MidRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  rank1StoreInfo: {
+    flex: 1,
+  },
+  rank1PriceBlock: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
+  rank1Price: {
+    ...typography.price,
+    color: colors.tertiary,
+    fontSize: 22,
+  },
+  directionsBtn: {
+    width: '100%',
+    backgroundColor: colors.tertiary,
+    borderRadius: spacing.radiusMd,
     paddingVertical: spacing.md,
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
-    borderRadius: spacing.radiusMd,
   },
-  verifiedStateText: {
-    ...typography.body,
-    fontWeight: '600' as const,
+  directionsBtnText: {
+    ...typography.labelMd,
+    color: colors.white,
+  },
+  rank23Row: {
+    gap: spacing.sm,
+  },
+  rank23Card: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: spacing.radiusLg,
+    padding: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rank23Left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  rank23NumCircle: {
+    width: spacing.priceDetailRankCircleSm,
+    height: spacing.priceDetailRankCircleSm,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: colors.surfaceVariant,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rank23NumText: {
+    ...typography.headingMd,
+    fontFamily: PJS.bold,
+    color: colors.gray700,
+  },
+  rank23TextBlock: {
+    flex: 1,
+  },
+  rank23StoreName: {
+    ...typography.labelMd,
+    color: colors.onBackground,
+    marginBottom: spacing.micro,
+  },
+  rank23SubText: {
+    ...typography.labelSm,
+    color: colors.outlineColor,
+  },
+
+  // ─── 가격 인증 현황 ───────────────────────────────────────────────────────
+  noVerificationText: {
+    ...typography.bodySm,
+    color: colors.gray400,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+  },
+  verificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  verificationItemBorder: {
+    borderBottomWidth: spacing.borderThin,
+    borderBottomColor: colors.surfaceContainerHigh,
+  },
+  verificationAvatar: {
+    width: spacing.priceDetailVerifyAvatarSize,
+    height: spacing.priceDetailVerifyAvatarSize,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: colors.surfaceContainerLow,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  verificationAvatarText: {
+    ...typography.headingLg,
     color: colors.primary,
   },
-  disputeInput: {
-    borderWidth: spacing.borderThin,
-    borderColor: colors.gray200,
-    borderRadius: spacing.radiusMd,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    ...typography.body,
-    color: colors.black,
-    marginBottom: spacing.lg,
+  verificationInfo: {
+    flex: 1,
   },
+  verificationName: {
+    ...typography.labelMd,
+    color: colors.onBackground,
+    marginBottom: spacing.micro,
+  },
+  verificationTime: {
+    ...typography.labelSm,
+    color: colors.outlineColor,
+  },
+  verificationResultBadge: {
+    paddingHorizontal: spacing.badgePadH,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.radiusFull,
+  },
+  confirmedResultBadge: {
+    backgroundColor: colors.successContainer,
+  },
+  disputedResultBadge: {
+    backgroundColor: colors.errorContainer,
+  },
+  verificationResultText: {
+    ...typography.labelSm,
+    fontFamily: PJS.bold,
+  },
+  confirmedResultText: {
+    color: colors.onSuccessContainer,
+  },
+  disputedResultText: {
+    color: colors.onErrorContainer,
+  },
+  saleText: {
+    ...typography.body,
+    color: colors.onBackground,
+  },
+
+  // ─── Dispute Modal ────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -747,18 +1080,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.modalOverlay,
   },
   modalSheet: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surfaceContainerLowest,
     borderTopLeftRadius: spacing.radiusXl,
     borderTopRightRadius: spacing.radiusXl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
+    padding: spacing.xxl,
   },
   modalHandle: {
     width: spacing.headerIconSize,
     height: spacing.xs,
-    borderRadius: spacing.micro,
     backgroundColor: colors.gray200,
+    borderRadius: spacing.radiusFull,
     alignSelf: 'center',
     marginBottom: spacing.lg,
   },
@@ -768,110 +1099,50 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     ...typography.bodySm,
-    color: colors.gray600,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  disputeInput: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: spacing.radiusMd,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    ...typography.body,
+    marginBottom: spacing.sm,
+  },
+  disputeErrorText: {
+    ...typography.error,
+    marginBottom: spacing.sm,
   },
   modalButtonRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    marginTop: spacing.sm,
   },
-  modalButton: {
+  modalBtn: {
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: spacing.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalCancelButton: {
-    backgroundColor: colors.gray100,
-    borderWidth: spacing.borderThin,
-    borderColor: colors.gray200,
+  modalCancelBtn: {
+    backgroundColor: colors.surfaceContainerLow,
   },
-  modalCancelButtonText: {
+  modalCancelBtnText: {
     ...typography.body,
-    fontWeight: '600' as const,
+    fontFamily: PJS.semiBold,
     color: colors.gray700,
   },
-  modalSubmitButton: {
-    backgroundColor: colors.danger,
+  modalSubmitBtn: {
+    backgroundColor: colors.primary,
   },
-  modalSubmitButtonText: {
+  modalSubmitBtnText: {
     ...typography.body,
-    fontWeight: '600' as const,
+    fontFamily: PJS.bold,
     color: colors.white,
   },
-  modalButtonDisabled: {
-    opacity: 0.4,
-  },
-  verifiersContainer: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: spacing.borderThin,
-    borderTopColor: colors.gray100,
-  },
-  verifiersTitle: {
-    ...typography.bodySm,
-    fontWeight: '600' as const,
-    color: colors.gray700,
-    marginBottom: spacing.md,
-  },
-  verifierItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: spacing.borderThin,
-    borderBottomColor: colors.gray100,
-  },
-  verifierItemLast: {
-    borderBottomWidth: 0,
-  },
-  verifierAvatarCircle: {
-    width: spacing.backBtnSize,
-    height: spacing.backBtnSize,
-    borderRadius: spacing.backBtnSize / 2,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  verifierAvatarText: {
-    ...typography.body,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
-  verifierInfo: {
-    flex: 1,
-  },
-  verifierName: {
-    ...typography.body,
-    fontWeight: '500' as const,
-    color: colors.black,
-  },
-  verifierTrust: {
-    ...typography.bodySm,
-    color: colors.gray600,
-    marginTop: spacing.micro,
-  },
-  verificationBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.radiusMd,
-  },
-  verificationBadgeConfirmed: {
-    backgroundColor: colors.primaryLight,
-  },
-  verificationBadgeDisputed: {
-    backgroundColor: colors.dangerLight,
-  },
-  verificationBadgeText: {
-    ...typography.bodySm,
-    fontWeight: '600' as const,
-  },
-  verificationBadgeTextConfirmed: {
-    color: colors.primary,
-  },
-  verificationBadgeTextDisputed: {
-    color: colors.danger,
+  modalBtnDisabled: {
+    opacity: spacing.disabledOpacity,
   },
 });
 

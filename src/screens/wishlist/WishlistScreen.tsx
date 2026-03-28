@@ -1,17 +1,16 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Pressable,
   StyleSheet, Alert, RefreshControl, type ListRenderItemInfo,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MainTabScreenProps } from '../../navigation/types';
-import type { WishlistItem } from '../../types/api.types';
+import type { WishlistItem, ProductCategory, UnitType } from '../../types/api.types';
 import { useMyWishlist, useRemoveWishlist } from '../../hooks/queries/useWishlist';
 import SkeletonCard from '../../components/common/SkeletonCard';
 import HeartIcon from '../../components/icons/HeartIcon';
 import WifiOffIcon from '../../components/icons/WifiOffIcon';
-import MapPinIcon from '../../components/icons/MapPinIcon';
+import StoreIcon from '../../components/icons/StoreIcon';
 import { formatPrice } from '../../utils/format';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -19,24 +18,43 @@ import { typography } from '../../theme/typography';
 
 type Props = MainTabScreenProps<'Wishlist'>;
 
+// ── 단위 표시 ──────────────────────────────────────────────────────────────
+const UNIT_LABEL: Record<UnitType, string> = {
+  g: 'g', kg: 'kg', ml: 'ml', l: 'L',
+  count: '개', bunch: '단', pack: '팩', bag: '봉', other: '',
+};
+
+// ── 카테고리 → 한글 배지 / 이모지 ─────────────────────────────────────────
+const CATEGORY_BADGE: Record<ProductCategory, { label: string; emoji: string }> = {
+  vegetable:  { label: '채소',     emoji: '🥦' },
+  fruit:      { label: '과일',     emoji: '🍎' },
+  meat:       { label: '육류',     emoji: '🥩' },
+  seafood:    { label: '수산물',   emoji: '🐟' },
+  dairy:      { label: '유제품',   emoji: '🥛' },
+  grain:      { label: '곡물',     emoji: '🌾' },
+  processed:  { label: '가공식품', emoji: '🛒' },
+  household:  { label: '생활용품', emoji: '🧴' },
+  other:      { label: '기타',     emoji: '📦' },
+};
+
 const WishlistScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: wishlist, isLoading, isError, refetch } = useMyWishlist();
   const { mutate: removeWishlist } = useRemoveWishlist();
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  const listContentStyle = React.useMemo(
+  const items = wishlist?.items ?? [];
+
+  const listContentStyle = useMemo(
     () => ({
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
       paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl + spacing.lg,
     }),
     [insets.bottom],
   );
 
   const handleItemPress = useCallback((item: WishlistItem) => {
-    // HomeStack으로 크로스 탭 이동: 탭 스택 상태 보존은 React Navigation 기본 동작
     navigation.navigate('HomeStack', {
       screen: 'PriceCompare',
       params: { productId: item.productId, productName: item.productName },
@@ -54,101 +72,96 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleDelete = useCallback((item: WishlistItem) => {
     Alert.alert('찜 삭제', `${item.productName}을(를) 찜 목록에서 삭제할까요?`, [
-      {
-        text: '취소',
-        style: 'cancel',
-        onPress: () => {
-          // 스와이프 아이템 닫기
-          const ref = swipeableRefs.current.get(item.productId);
-          if (ref) {
-            ref.close();
-          }
-        },
-      },
+      { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
-        // toast 콜백은 useRemoveWishlist 훅 레벨에서 처리 (언마운트 후에도 안전)
         onPress: () => removeWishlist(item.productId),
       },
     ]);
   }, [removeWishlist]);
 
-  const renderDeleteAction = useCallback(
-    (item: WishlistItem) => (
-      <View style={styles.deleteActionContainer}>
-        <TouchableOpacity
-          style={styles.deleteAction}
-          onPress={() => {
-            // Swipeable 닫기 후 삭제 로직 수행
-            const ref = swipeableRefs.current.get(item.productId);
-            if (ref) {
-              ref.close();
-            }
-            removeWishlist(item.productId);
-          }}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.productName} 즉시 삭제`}
-        >
-          <Text style={styles.deleteActionText}>삭제</Text>
-        </TouchableOpacity>
-      </View>
-    ),
-    [removeWishlist]
-  );
-
-  const renderItem = useCallback(({ item }: ListRenderItemInfo<WishlistItem>) => (
-    <Swipeable
-      ref={(ref) => {
-        if (ref) {
-          swipeableRefs.current.set(item.productId, ref);
-        } else {
-          swipeableRefs.current.delete(item.productId);
-        }
-      }}
-      renderRightActions={() => renderDeleteAction(item)}
-      overshootRight={false}
-      rightThreshold={50}
-      friction={2}
-    >
+  // ── 카드 (모든 아이템 동일 레이아웃) ────────────────────────────────────
+  const renderCard = useCallback((item: WishlistItem) => {
+    const badge = CATEGORY_BADGE[item.category] ?? { label: '기타', emoji: '📦' };
+    const unitLabel = UNIT_LABEL[item.unitType] ?? '';
+    return (
       <Pressable
         style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
         onPress={() => handleItemPress(item)}
         accessibilityRole="button"
         accessibilityLabel={`찜한 상품 ${item.productName}${item.lowestPrice !== null ? ` ${formatPrice(item.lowestPrice)}` : ''}`}
       >
-        <View style={styles.cardColorBar} />
-        <View style={styles.cardBody}>
-          <Text style={styles.productName} numberOfLines={1}>{item.productName}</Text>
-          {item.lowestPrice !== null ? (
-            <View style={styles.priceRow}>
-              <Text style={styles.lowestPrice}>{formatPrice(item.lowestPrice)}</Text>
-              {item.lowestPriceStoreName ? (
-                <Text style={styles.storeName} numberOfLines={1}>{item.lowestPriceStoreName}</Text>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={styles.noPrice}>가격 정보 없음</Text>
-          )}
+        {/* 이미지 영역: 다크 배경 + 이모지 */}
+        <View style={styles.cardImgWrap}>
+          <Text style={styles.cardEmoji}>{badge.emoji}</Text>
         </View>
+
+        {/* 하트 버튼: 카드 우상단 absolute */}
         <TouchableOpacity
-          style={styles.deleteBtn}
+          style={styles.cardHeartBtn}
           onPress={() => handleDelete(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`${item.productName} 찜 삭제`}
         >
-          <HeartIcon size={20} color={colors.danger} filled />
+          <HeartIcon size={16} color={colors.danger} filled />
         </TouchableOpacity>
+
+        {/* 콘텐츠 영역 */}
+        <View style={styles.cardBody}>
+          {/* 배지 (독립 row, 좌측 정렬) */}
+          <View style={styles.cardBadgeRow}>
+            <View style={styles.cardBadge}>
+              <Text style={styles.cardBadgeText}>{badge.label.toUpperCase()}</Text>
+            </View>
+          </View>
+
+          {/* 상품명 (1줄) */}
+          <Text style={styles.cardProductName} numberOfLines={1}>{item.productName}</Text>
+
+          {/* 가격 + 단위 */}
+          {item.lowestPrice !== null ? (
+            <View style={styles.cardPriceRow}>
+              <Text style={styles.cardPrice}>{formatPrice(item.lowestPrice)}</Text>
+              {unitLabel ? <Text style={styles.cardPriceUnit}>/ {unitLabel}</Text> : null}
+            </View>
+          ) : (
+            <Text style={styles.noPriceText}>가격 정보 없음</Text>
+          )}
+
+          {/* 매장 */}
+          {item.lowestPriceStoreName ? (
+            <View style={styles.cardStoreRow}>
+              <StoreIcon size={12} color={colors.outlineColor} />
+              <Text style={styles.cardStoreName} numberOfLines={1}>
+                {item.lowestPriceStoreName}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* 버튼 */}
+          <TouchableOpacity
+            style={styles.cardViewBtn}
+            onPress={() => handleItemPress(item)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.productName} 가격 보기`}
+          >
+            <Text style={styles.cardViewBtnText}>→ 가격 보기</Text>
+          </TouchableOpacity>
+        </View>
       </Pressable>
-    </Swipeable>
-  ), [handleItemPress, handleDelete, renderDeleteAction]);
+    );
+  }, [handleItemPress, handleDelete]);
 
-  const items = wishlist?.items ?? [];
+  const renderItem = useCallback(({ item }: ListRenderItemInfo<WishlistItem>) => {
+    return renderCard(item);
+  }, [renderCard]);
 
-  // ─── 빈 상태 ────────────────────────────────────────────────────────────
-  const renderEmptyState = useCallback(() => {
+  // ── 빈 상태 ──────────────────────────────────────────────────────────────
+  const renderEmpty = useCallback(() => {
     if (isError) {
       return (
         <View style={styles.emptyContainer}>
@@ -157,71 +170,107 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           <Text style={styles.emptyTitle}>불러올 수 없어요</Text>
           <Text style={styles.emptySubtitle}>네트워크 상태를 확인하고 다시 시도해 주세요.</Text>
-          <TouchableOpacity style={styles.emptyButton} onPress={() => refetch()} activeOpacity={0.8}>
-            <Text style={styles.emptyButtonText}>다시 시도</Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => refetch()}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="다시 시도"
+          >
+            <Text style={styles.emptyBtnText}>다시 시도</Text>
           </TouchableOpacity>
         </View>
       );
     }
     return (
       <View style={styles.emptyContainer}>
-        {/* 장식 배경 */}
         <View style={styles.emptyDecorCircle} />
         <View style={styles.emptyIconCard}>
           <HeartIcon size={80} color={colors.primary} filled />
         </View>
-
-        {/* 텍스트 */}
-        <Text style={styles.emptyTitle}>찜한 항목이 없습니다.</Text>
+        <Text style={styles.emptyTitle}>찜한 항목이 없어요</Text>
         <Text style={styles.emptySubtitle}>
-          마음에 드는 상품을 찜해보세요!{'\n'}좋아하는 상품을 여기서 확인하실 수 있습니다.
+          마음에 드는 상품을 찜해보세요!{'\n'}하트 아이콘을 누르면 여기 저장돼요.
         </Text>
-
-        {/* CTA */}
         <TouchableOpacity
-          style={styles.emptyButton}
+          style={styles.emptyBtn}
           onPress={() => navigation.navigate('HomeStack', { screen: 'Home' })}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="홈으로 이동하여 상품 둘러보기"
         >
-          <Text style={styles.emptyButtonText}>지금 둘러보기</Text>
+          <Text style={styles.emptyBtnText}>지금 둘러보기</Text>
         </TouchableOpacity>
-
-        {/* 큐레이션 팁 카드 */}
         <View style={styles.tipCard}>
-          <View style={styles.tipIconWrap}>
-            <Text style={styles.tipEmoji}>💡</Text>
-          </View>
+          <Text style={styles.tipEmoji}>💡</Text>
           <View style={styles.tipTextWrap}>
             <Text style={styles.tipLabel}>큐레이션 팁</Text>
-            <Text style={styles.tipBody}>가격 카드의 하트 아이콘을 누르면 나중에 볼 수 있도록 저장됩니다.</Text>
+            <Text style={styles.tipBody}>
+              가격 카드의 하트 아이콘을 누르면 나중에 볼 수 있도록 저장됩니다.
+            </Text>
           </View>
         </View>
       </View>
     );
   }, [isError, refetch, navigation]);
 
+  // ── 에디토리얼 헤더: "내 수확물" 44px extrabold ─────────────────────────
+  const listHeader = useMemo(() => (
+    <View style={styles.editorialHeader}>
+      <Text style={styles.editorialTitle}>내 수확물</Text>
+      <Text style={styles.editorialSubtitle}>동네 이웃이 추천한 물건, 한눈에 모아봐요.</Text>
+    </View>
+  ), []);
+
+  // ── 추천 섹션 (리스트 하단) ─────────────────────────────────────────────
+  const listFooter = useMemo(() => items.length > 0 ? (
+    <View style={styles.recommendSection}>
+      <Text style={styles.recommendLabel}>추천 상품</Text>
+      <View style={styles.recommendCard}>
+        <Text style={styles.recommendBody}>더 많은 동네 특산물을 찾아보세요.</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('HomeStack', { screen: 'Home' })}
+          accessibilityRole="button"
+          accessibilityLabel="계절 특산물 탐색하기"
+        >
+          <Text style={styles.recommendLink}>계절 특산물 탐색 →</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  ) : null, [items.length, navigation]);
+
+  const containerStyle = useMemo(
+    () => [styles.container, { paddingTop: insets.top }],
+    [insets.top],
+  );
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* 헤더 */}
+    <View style={containerStyle}>
+      {/* ── 헤더: "찜 목록" + 숫자 배지 ── */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MapPinIcon size={20} color={colors.primary} />
-          <Text style={styles.headerTitle}>찜 목록 ({items.length})</Text>
-        </View>
+        <Text style={styles.headerTitle}>찜 목록</Text>
+        {items.length > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{items.length}</Text>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
         <SkeletonCard variant="wishlist" />
+      ) : isError ? (
+        renderEmpty()
       ) : items.length === 0 ? (
-        renderEmptyState()
+        renderEmpty()
       ) : (
         <FlatList
           data={items}
-          keyExtractor={item => item.productId}
+          keyExtractor={(item) => item.productId}
           renderItem={renderItem}
           contentContainerStyle={listContentStyle}
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews
           refreshControl={
@@ -239,16 +288,228 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.gray100 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
-    backgroundColor: colors.white,
-    borderBottomWidth: 0.5, borderBottomColor: colors.gray200,
+  container: {
+    flex: 1,
+    backgroundColor: colors.surface,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerTitle: { ...typography.headingXl },
-  // ─── 빈 상태 ───────────────────────────────────────────────────────────
+
+  // ─── 헤더 ─────────────────────────────────────────────────────────────────
+  // HTML: flex items-center gap-2 px-5 py-3
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: spacing.borderThin,
+    borderBottomColor: colors.surfaceContainer,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: colors.black,
+    letterSpacing: -0.3,
+  },
+  countBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: spacing.radiusFull,
+    minWidth: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '800' as const,
+    color: colors.white,
+  },
+
+  // ─── 에디토리얼 헤더 ──────────────────────────────────────────────────────
+  // HTML: text-[44px] font-extrabold text-primary leading-tight tracking-[-1.5px]
+  editorialHeader: {
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
+  },
+  editorialTitle: {
+    fontSize: 44,
+    fontWeight: '800' as const,
+    color: colors.primary,
+    letterSpacing: -1.5,
+    lineHeight: 50,
+    marginBottom: spacing.xs,
+  },
+  editorialSubtitle: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: colors.onSurfaceVariant,
+  },
+
+  // ─── 공통 ─────────────────────────────────────────────────────────────────
+  cardPressed: {
+    opacity: 0.93,
+    transform: [{ scale: 0.99 }],
+  },
+  noPriceText: {
+    fontSize: 13,
+    fontWeight: '400' as const,
+    color: colors.gray400,
+  },
+
+  // ─── 카드 (모든 아이템 동일) ─────────────────────────────────────────────
+  card: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: spacing.radiusLg,
+    marginBottom: spacing.md,
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',  // borderRadius 클리핑 유지 (Android 필수)
+  },
+  // 이미지: 2.5:1 비율 다크 배경 + 이모지
+  cardImgWrap: {
+    width: '100%',
+    aspectRatio: 2.5,
+    backgroundColor: colors.wishlistImgBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardEmoji: {
+    fontSize: 52,
+  },
+  // 하트 버튼: 카드 우상단 absolute
+  cardHeartBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 10,
+    width: spacing.heartBtnSm,
+    height: spacing.heartBtnSm,
+    borderRadius: spacing.heartBtnSm / 2,
+    backgroundColor: colors.surfaceContainerLowest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.shadowBase,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  // 콘텐츠 영역 (padding 축소: 16→12)
+  cardBody: {
+    padding: spacing.md,
+  },
+  // 배지 row (독립, 좌측 정렬)
+  cardBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  cardBadge: {
+    backgroundColor: colors.tertiaryContainer,
+    borderRadius: spacing.radiusFull,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  cardBadgeText: {
+    fontSize: 9,
+    fontWeight: '800' as const,
+    color: colors.onTertiaryContainer,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase' as const,
+  },
+  cardProductName: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.black,
+    lineHeight: 22,
+    marginBottom: spacing.xs,
+  },
+  cardPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  cardPrice: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    letterSpacing: -0.3,
+  },
+  cardPriceUnit: {
+    fontSize: 12,
+    fontWeight: '400' as const,
+    color: colors.outlineColor,
+  },
+  cardStoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,  // 16px → 8px
+  },
+  cardStoreName: {
+    fontSize: 12,
+    fontWeight: '500' as const,
+    color: colors.outlineColor,
+    flex: 1,
+  },
+  cardViewBtn: {
+    width: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.sm + spacing.micro,  // 12px → 10px
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardViewBtnText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.white,
+  },
+
+  // ─── 추천 섹션 ────────────────────────────────────────────────────────────
+  recommendSection: {
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+  },
+  recommendLabel: {
+    fontSize: 10,
+    fontWeight: '800' as const,
+    color: colors.tertiary,
+    letterSpacing: 3,
+    textTransform: 'uppercase' as const,
+    marginBottom: spacing.md,
+  },
+  recommendCard: {
+    width: '100%',
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: spacing.radiusLg,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  recommendBody: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: colors.onSurfaceVariant,
+    textAlign: 'center' as const,
+  },
+  recommendLink: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.tertiaryFixedDim,
+    paddingBottom: spacing.micro,
+  },
+
+  // ─── 빈 상태 ──────────────────────────────────────────────────────────────
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -269,7 +530,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: spacing.radiusXl,
-    backgroundColor: colors.secondaryBg,
+    backgroundColor: colors.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
@@ -292,14 +553,14 @@ const styles = StyleSheet.create({
     lineHeight: spacing.xl,
     marginBottom: spacing.xl,
   },
-  emptyButton: {
+  emptyBtn: {
     backgroundColor: colors.primary,
     borderRadius: spacing.radiusFull,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
     marginBottom: spacing.xl,
   },
-  emptyButtonText: {
+  emptyBtnText: {
     ...typography.bodySm,
     fontWeight: '700' as const,
     color: colors.white,
@@ -307,7 +568,7 @@ const styles = StyleSheet.create({
   tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.secondaryBg,
+    backgroundColor: colors.surfaceContainerLow,
     borderRadius: spacing.radiusMd,
     borderLeftWidth: 3,
     borderLeftColor: colors.primary,
@@ -315,13 +576,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     width: '100%',
   },
-  tipIconWrap: {
-    width: spacing.rankBadgeSize,
-    height: spacing.rankBadgeSize,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tipEmoji: {
+    fontSize: spacing.iconSm,
+    lineHeight: 22,
   },
-  tipEmoji: { fontSize: spacing.iconSm },
   tipTextWrap: { flex: 1 },
   tipLabel: {
     ...typography.bodySm,
@@ -333,45 +591,6 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray700,
     lineHeight: spacing.lg,
-  },
-  // ──────────────────────────────────────────────────────────────────────
-  card: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.white, borderRadius: spacing.radiusMd,
-    borderWidth: 0.5, borderColor: colors.gray200,
-    overflow: 'hidden', marginBottom: spacing.cardGap,
-  },
-  cardColorBar: {
-    width: 3, backgroundColor: colors.primary, alignSelf: 'stretch',
-    marginVertical: spacing.md, marginLeft: spacing.inputPad, borderRadius: spacing.micro,
-  },
-  cardBody: { flex: 1, paddingVertical: spacing.lg, paddingLeft: spacing.md, paddingRight: spacing.sm },
-  cardPressed: { opacity: 0.7 },
-  productName: { ...typography.headingMd, marginBottom: spacing.cardTextGap },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  lowestPrice: { ...typography.price },
-  storeName: { ...typography.bodySm, flex: 1 },
-  noPrice: { ...typography.bodySm, color: colors.gray400 },
-  deleteBtn: { padding: spacing.lg },
-  deleteActionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    backgroundColor: colors.danger,
-    marginBottom: spacing.cardGap,
-    borderRadius: spacing.radiusMd,
-    marginRight: spacing.xl,
-  },
-  deleteAction: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteActionText: {
-    ...typography.bodySm,
-    fontWeight: '600' as const,
-    color: colors.white,
   },
 });
 

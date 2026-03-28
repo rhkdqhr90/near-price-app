@@ -84,7 +84,7 @@ export const usePriceRegisterStore = create<PriceRegisterState>((set) => ({
       return { items, isDirty: true };
     }),
   removeItem: (index) =>
-    set((state) => ({ items: state.items.filter((_, i) => i !== index) })),
+    set((state) => ({ items: state.items.filter((_, i) => i !== index), isDirty: true })),
   reset: () => set({
     storeId: null,
     storeName: null,

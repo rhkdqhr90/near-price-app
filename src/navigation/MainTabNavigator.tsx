@@ -224,7 +224,7 @@ const UserTabIcon = makeTabIcon(UserIconSvg);
 const FABTabButton: React.FC<{ onPress?: BottomTabBarButtonProps['onPress'] }> = ({ onPress }) => (
   <TouchableOpacity
     style={styles.fabContainer}
-    onPress={onPress}
+    onPress={onPress ?? (() => {})}
     activeOpacity={0.85}
     accessibilityRole="button"
     accessibilityLabel="가격 등록"
@@ -270,7 +270,7 @@ const MainTabNavigator: React.FC = () => {
         component={HomeStackNavigator}
         options={{ tabBarLabel: '홈', tabBarIcon: HomeTabIcon }}
         listeners={({ navigation }) => ({
-          tabPress: () => navigation.navigate('HomeStack', { screen: 'Home' }),
+          tabPress: (e) => { e.preventDefault(); navigation.navigate('HomeStack', { screen: 'Home' }); },
         })}
       />
       <Tab.Screen
@@ -281,7 +281,7 @@ const MainTabNavigator: React.FC = () => {
           tabBarIcon: FlyerTabIcon,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => navigation.navigate('Flyer', { screen: 'FlyerList' }),
+          tabPress: (e) => { e.preventDefault(); navigation.navigate('Flyer', { screen: 'FlyerList' }); },
         })}
       />
       <Tab.Screen
@@ -291,9 +291,10 @@ const MainTabNavigator: React.FC = () => {
           tabBarLabel: () => null,
           tabBarIcon: () => null,
           tabBarButton: renderFABTabButton,
+          tabBarStyle: styles.tabBarHidden,
         }}
         listeners={({ navigation }) => ({
-          tabPress: () => navigation.navigate('PriceRegisterStack', { screen: 'StoreSelect' }),
+          tabPress: (e) => { e.preventDefault(); navigation.navigate('PriceRegisterStack', { screen: 'StoreSelect' }); },
         })}
       />
       <Tab.Screen
@@ -306,7 +307,7 @@ const MainTabNavigator: React.FC = () => {
         component={MyPageStackNavigator}
         options={{ tabBarLabel: 'MY', tabBarIcon: UserTabIcon }}
         listeners={({ navigation }) => ({
-          tabPress: () => navigation.navigate('MyPageStack', { screen: 'MyPage' }),
+          tabPress: (e) => { e.preventDefault(); navigation.navigate('MyPageStack', { screen: 'MyPage' }); },
         })}
       />
     </Tab.Navigator>
@@ -347,21 +348,26 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: dsColors.white,
     shadowColor: dsColors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: spacing.fabShadowOffsetY },
+    shadowOpacity: spacing.fabShadowOpacity,
+    shadowRadius: spacing.fabShadowRadius,
+    elevation: spacing.fabShadowElevation,
   },
   fabPlus: {
     fontFamily: PJS.bold,
     fontSize: spacing.fabPlusFontSize,
-    lineHeight: spacing.fabPlusLineHeight,
+    lineHeight: spacing.fabPlusFontSize,
     color: dsColors.white,
+    includeFontPadding: false,   // Android: 폰트 기본 패딩 제거 → 수직 중앙 정렬
+    textAlignVertical: 'center', // Android: 텍스트 수직 중앙 정렬
   },
   fabLabel: {
+    ...typography.captionBold,
     fontFamily: PJS.extraBold,
-    fontSize: 11,
     color: dsColors.primary,
+  },
+  tabBarHidden: {
+    display: 'none' as const,
   },
 });
 

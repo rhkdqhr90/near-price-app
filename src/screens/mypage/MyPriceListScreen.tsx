@@ -192,12 +192,15 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: spacing.radiusMd,
-    borderWidth: 0.5,
-    borderColor: colors.gray200,
     overflow: 'hidden',
     marginBottom: spacing.cardGap,
+    shadowColor: colors.tertiaryContainer,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   colorBar: {
     width: 3,

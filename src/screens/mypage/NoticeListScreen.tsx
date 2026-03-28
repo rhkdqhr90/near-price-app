@@ -91,6 +91,7 @@ const NoticeListScreen: React.FC<Props> = ({ navigation }) => {
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       ItemSeparatorComponent={ItemSeparator}
+      removeClippedSubviews={true}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
