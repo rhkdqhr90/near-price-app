@@ -173,7 +173,7 @@ jobs:
              ${{ steps.find_artifact.outputs.artifact_name }}
 
       - name: 빌드 아티팩트 업로드
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.find_artifact.outputs.artifact_name }}
           path: ${{ steps.find_artifact.outputs.artifact_name }}
