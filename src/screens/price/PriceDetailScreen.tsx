@@ -33,7 +33,7 @@ import { useReactions, useConfirmReaction, useReportReaction } from '../../hooks
 import { useToastStore } from '../../store/toastStore';
 import { useAuthStore } from '../../store/authStore';
 import { useLocationStore } from '../../store/locationStore';
-import { isAxiosError } from '../../api/client';
+import { classifyError } from '../../utils/apiError';
 import type { ProductCategory } from '../../types/api.types';
 
 type Props = HomeScreenProps<'PriceDetail'>;
@@ -68,7 +68,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
 
   const bottomSpacerStyle = useMemo(
-    () => ({ height: spacing.xxl + insets.bottom + 60 }),
+    () => ({ height: spacing.xxl + insets.bottom + spacing.stickyReactionBarHeight }),
     [insets.bottom],
   );
 
@@ -154,10 +154,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           showToast('이의 제기가 등록되었어요', 'success');
         },
         onError: (err) => {
-          const msg = isAxiosError<{ message?: string }>(err)
-            ? err.response?.data?.message
-            : undefined;
-          setDisputeError(msg ?? '이의 제기에 실패했어요');
+          setDisputeError(classifyError(err).message);
         },
       },
     );

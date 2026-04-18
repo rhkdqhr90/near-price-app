@@ -36,6 +36,13 @@ export const spacing = {
   // CameraScreen 전용
   cameraControlSize: 56,  // 갤러리 버튼 / 셔터 내부 고정 크기
   cameraShutterSize: 72,  // 셔터 버튼 고정 크기
+  cameraGuideFrameW: 280,
+  cameraGuideFrameH: 180,
+  cameraGuideCornerSize: 28,
+  cameraGuideCornerBorder: 4,
+
+  // 가격 상세 하단 sticky reaction bar 예상 높이
+  stickyReactionBarHeight: 60,
 
   // OcrResultScreen 전용
   imagePreviewH: 220,     // OCR 결과 화면 이미지 미리보기 높이

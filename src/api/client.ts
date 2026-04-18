@@ -93,7 +93,9 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 403 = 토큰 무효/계정 상태 이상 → 즉시 로그아웃 (재시도 없음)
+    // 403 = 토큰 폐기/계정 정지 → 즉시 로그아웃 (재시도 없음).
+    // 백엔드의 AdminGuard 엔드포인트(관리자 쓰기 API)는 일반 앱 플로우에서 호출하지 않는다.
+    // 만약 향후 일반 유저가 도달 가능한 403 응답이 생기면 body.code로 분기 필요.
     if (error.response?.status === 403) {
       const { logout } = useAuthStore.getState();
       queryClient.clear();

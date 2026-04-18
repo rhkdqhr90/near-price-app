@@ -44,6 +44,23 @@ const STATUS_TO_CODE: Record<number, ApiErrorCode> = {
   503: 'SERVICE_UNAVAILABLE',
 };
 
+const VALID_CODES = new Set<ApiErrorCode>([
+  'VALIDATION_FAILED',
+  'UNAUTHORIZED',
+  'TOKEN_INVALID',
+  'NOT_FOUND',
+  'CONFLICT',
+  'RATE_LIMITED',
+  'INTERNAL_ERROR',
+  'SERVICE_UNAVAILABLE',
+  'NETWORK',
+  'TIMEOUT',
+  'UNKNOWN',
+]);
+
+const toKnownCode = (raw: unknown): ApiErrorCode | null =>
+  typeof raw === 'string' && VALID_CODES.has(raw as ApiErrorCode) ? (raw as ApiErrorCode) : null;
+
 export const classifyError = (error: unknown): ClassifiedError => {
   if (axios.isAxiosError(error)) {
     if (error.code === 'ECONNABORTED') {
@@ -53,9 +70,9 @@ export const classifyError = (error: unknown): ClassifiedError => {
       return { code: 'NETWORK', message: DEFAULT_MESSAGES.NETWORK };
     }
     const status = error.response.status;
-    const body = error.response.data as { code?: string; message?: string } | undefined;
-    const code = (body?.code as ApiErrorCode) ?? STATUS_TO_CODE[status] ?? 'UNKNOWN';
-    const message = body?.message ?? DEFAULT_MESSAGES[code] ?? DEFAULT_MESSAGES.UNKNOWN;
+    const body = error.response.data as { code?: unknown; message?: string } | undefined;
+    const code = toKnownCode(body?.code) ?? STATUS_TO_CODE[status] ?? 'UNKNOWN';
+    const message = body?.message ?? DEFAULT_MESSAGES[code];
     return { code, message, status };
   }
   return { code: 'UNKNOWN', message: DEFAULT_MESSAGES.UNKNOWN };

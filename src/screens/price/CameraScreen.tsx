@@ -140,9 +140,6 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-const GUIDE_FRAME_WIDTH = 280;
-const GUIDE_FRAME_HEIGHT = 180;
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
   camera: { flex: 1 },
@@ -158,44 +155,44 @@ const styles = StyleSheet.create({
   },
   guideMiddleRow: {
     flexDirection: 'row',
-    height: GUIDE_FRAME_HEIGHT,
+    height: spacing.cameraGuideFrameH,
   },
   guideFrame: {
-    width: GUIDE_FRAME_WIDTH,
+    width: spacing.cameraGuideFrameW,
   },
   guideCorner: {
     position: 'absolute',
-    width: 28,
-    height: 28,
+    width: spacing.cameraGuideCornerSize,
+    height: spacing.cameraGuideCornerSize,
     borderColor: colors.primary,
   },
   guideCornerTL: {
     top: 0,
     left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderTopLeftRadius: 4,
+    borderTopWidth: spacing.cameraGuideCornerBorder,
+    borderLeftWidth: spacing.cameraGuideCornerBorder,
+    borderTopLeftRadius: spacing.cameraGuideCornerBorder,
   },
   guideCornerTR: {
     top: 0,
     right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderTopRightRadius: 4,
+    borderTopWidth: spacing.cameraGuideCornerBorder,
+    borderRightWidth: spacing.cameraGuideCornerBorder,
+    borderTopRightRadius: spacing.cameraGuideCornerBorder,
   },
   guideCornerBL: {
     bottom: 0,
     left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderBottomLeftRadius: 4,
+    borderBottomWidth: spacing.cameraGuideCornerBorder,
+    borderLeftWidth: spacing.cameraGuideCornerBorder,
+    borderBottomLeftRadius: spacing.cameraGuideCornerBorder,
   },
   guideCornerBR: {
     bottom: 0,
     right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderBottomRightRadius: 4,
+    borderBottomWidth: spacing.cameraGuideCornerBorder,
+    borderRightWidth: spacing.cameraGuideCornerBorder,
+    borderBottomRightRadius: spacing.cameraGuideCornerBorder,
   },
   overlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

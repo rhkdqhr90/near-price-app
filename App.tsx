@@ -39,10 +39,7 @@ function App(): React.JSX.Element {
         setIsBackground(true);
       } else if (nextAppState === 'active') {
         setIsBackground(false);
-        // 포그라운드 복귀 시 오프라인 플래그만 해제 — 실제 refetch는 onlineManager가 현재 화면 쿼리만 처리
-        if (useNetworkStore.getState().isOffline) {
-          useNetworkStore.getState().setOffline(false);
-        }
+        // 오프라인 플래그는 apiClient 성공 인터셉터가 첫 요청 성공 시 해제 → 여기서는 건드리지 않음
       }
     });
     return () => subscription.remove();
