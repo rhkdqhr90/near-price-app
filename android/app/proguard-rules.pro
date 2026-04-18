@@ -16,6 +16,7 @@
 
 # Firebase + ML Kit wrappers
 -keep class com.google.firebase.** { *; }
+-keep class com.google.firebase.messaging.** { *; }
 -keep class io.invertase.firebase.** { *; }
 -keep class com.google.mlkit.** { *; }
 

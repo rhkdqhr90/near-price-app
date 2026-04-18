@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert,
+  View, TouchableOpacity, StyleSheet, Alert,
   Platform, PermissionsAndroid,
   TextInput,
 } from 'react-native';
@@ -21,6 +21,7 @@ import { NaverMapMarkerOverlay, type NaverMapViewRef } from '@mj-studio/react-na
 import MapViewWrapper from '../../components/map/MapViewWrapper';
 import SearchIcon from '../../components/icons/SearchIcon';
 import CloseIcon from '../../components/icons/CloseIcon';
+import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
 import DetectedStoreSheet from '../../components/price/DetectedStoreSheet';
 import PendingPlaceSheet from '../../components/price/PendingPlaceSheet';
 import StoreSearchResultsSheet from '../../components/price/StoreSearchResultsSheet';
@@ -392,7 +393,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="뒤로 가기">
-          <Text style={styles.backFabText}>←</Text>
+          <ChevronLeftIcon size={24} color={colors.black} />
         </TouchableOpacity>
 
         <View style={styles.searchBarContainer}>
@@ -532,11 +533,6 @@ const styles = StyleSheet.create({
     shadowRadius: spacing.shadowRadiusMd,
     elevation: 4,
   },
-  backFabText: {
-    ...typography.headingXl,
-    lineHeight: 22,
-  },
-
 });
 
 export default StoreSelectScreen;

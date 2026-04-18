@@ -41,6 +41,7 @@ const performTokenRefresh = async (): Promise<string> => {
   const { accessToken: newAccess, refreshToken: newRefresh } = res.data;
   setTokens(newAccess, newRefresh);
   // 토큰 갱신 성공 후 개인정보 포함 쿼리만 무효화 (전체 무효화 시 불필요한 API 폭풍 발생)
+  // 키 출처: wishlistKeys.mine, priceKeys.mine (순환 의존 방지 위해 문자열 리터럴 사용)
   void queryClient.invalidateQueries({ queryKey: ['wishlists', 'me'] });
   void queryClient.invalidateQueries({ queryKey: ['prices', 'my'] });
   return newAccess;

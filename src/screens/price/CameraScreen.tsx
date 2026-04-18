@@ -55,8 +55,7 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const photo = await cameraRef.current.takePhoto();
       navigation.navigate('OcrResult', { imageUri: `file://${photo.path}` });
-    } catch (err) {
-      if (__DEV__) console.warn('[CameraScreen] takePhoto 실패', err);
+    } catch {
       Alert.alert('오류', '사진 촬영에 실패했습니다. 다시 시도해주세요.');
     } finally {
       isCapturingRef.current = false;
