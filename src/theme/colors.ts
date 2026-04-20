@@ -1,8 +1,8 @@
 export const colors = {
-  primary: '#7B5E3A',          // 보리씨앗 갈색
-  primaryLight: '#F5EFE6',     // 연한 크림
-  primaryDark: '#5C4429',      // 어두운 갈색
-  primaryContainer: '#9E7A50', // 중간 갈색
+  primary: '#00BFA5',          // Fresh Market teal
+  primaryLight: '#E0F7F3',     // 연한 민트
+  primaryDark: '#009688',      // 어두운 틸
+  primaryContainer: '#26A69A', // 중간 틸
   onPrimary: '#ffffff',        // On Primary
 
   secondaryBg: '#f5f3ee',      // surface-container-low
@@ -61,14 +61,14 @@ export const colors = {
   adText: '#5b4300',
 
   tabBorder: '#F0F0F0',
-  tabIconActive: '#7B5E3A',
-  tabIconInactive: '#A08060',  // warm muted brown (씨앗 팔레트 기반 desaturated)
+  tabIconActive: '#00BFA5',
+  tabIconInactive: '#C0C0C0',  // neutral muted gray
 
   // Outline ("Ghost Border" — 접근성용 최소 경계선)
   outlineVariant: '#c3c8bb',
 
   // Ambient Shadow (씨앗 기반 자연광 그림자)
-  ambientShadow: 'rgba(123, 94, 58, 0.04)',
+  ambientShadow: 'rgba(0, 150, 136, 0.04)',
 
   // Card decoration
   cardDivider: '#F5F5F5',
@@ -104,6 +104,14 @@ export const colors = {
   flyerFanBgRight: '#2e1e08',
   flyerCircleOverlay: 'rgba(255,255,255,0.12)',
   flyerCircleOverlayFaint: 'rgba(255,255,255,0.08)',
+  // HeroGradient 위 텍스트/칩 — 그라디언트 배경 위 화이트 반투명 레이어
+  onGradientChip: 'rgba(255,255,255,0.22)',
+  onGradientTextStrong: 'rgba(255,255,255,0.90)',
+  onGradientTextBase: 'rgba(255,255,255,0.82)',
+  onGradientTextMuted: 'rgba(255,255,255,0.80)',
+  onGradientTextSubtle: 'rgba(255,255,255,0.70)',
+  // 전단지 배너 primary 장식 오버레이
+  flyerPrimaryDotOverlay: 'rgba(0,191,165,0.28)',
   // 전단지 상세 헤더 glassmorphism
   flyerDetailHeaderBg: 'rgba(255,253,248,0.95)',
   flyerHeroDateLine: 'rgba(255,255,255,0.40)',
@@ -133,6 +141,16 @@ export const colors = {
   // Kakao
   kakaoYellow: '#FEE500',
 
+  // 전단지 페이퍼 (retro paper 느낌)
+  flyerPaper: '#E6DDC8',
+  flyerInk: '#2A1F14',
+  flyerInkMono: '#8B6E3C',
+  flyerInkSub: '#5A4328',
+  flyerSwitcherBg: '#D4C6A4',
+  flyerSwitcherActiveText: '#FDF5DD',
+  flyerTabInactiveBg: 'rgba(255,255,255,0.55)',
+  flyerTabInactiveBorder: 'rgba(42,31,20,0.25)',
+
   // 전단지 전용
   flyerRed: '#e60012',
   flyerHeroRed: '#dc2626',
@@ -141,3 +159,19 @@ export const colors = {
   flyerProductDark: '#1a1a1a',
   starYellow: '#F59E0B',
 } as const;
+
+// ─── 가격표(PriceTag) 그라디언트 토큰 ─────────────────────────────────────
+// LinearGradient start/end 쌍. 135deg 방향 권장.
+// 실제 매장 가격표 색상 관습 기반: sale/closing=레드, member=퍼플, card=딥블루, flat=옐로우
+export const priceTagGradients = {
+  normal: ['#00BFA5', '#00A58E'] as const,       // teal (primary)
+  sale: ['#FF4D4F', '#D63C3E'] as const,         // 세일 레드
+  special: ['#FF7043', '#F4511E'] as const,      // 오렌지 (핫딜)
+  closing: ['#E53935', '#B71C1C'] as const,      // 마감 딥레드
+  bundle: ['#26A69A', '#00897B'] as const,       // 틸 (1+1)
+  flat: ['#E8BC50', '#D1A337'] as const,         // 골드 (균일가)
+  member: ['#7E57C2', '#5E35B1'] as const,       // 퍼플 (회원)
+  cardPayment: ['#2C3E50', '#4CA1AF'] as const,  // 딥블루→틸 (카드 할인, BI 중립)
+} as const;
+
+export type PriceTagGradientKey = keyof typeof priceTagGradients;

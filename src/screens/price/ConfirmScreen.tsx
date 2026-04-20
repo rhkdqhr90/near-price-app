@@ -62,6 +62,19 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
             saleStartDate: item.eventStart,
             saleEndDate: item.eventEnd,
             condition: item.condition,
+            // ── 가격표(PriceTag) 필드 ──
+            priceTagType: item.priceTagType ?? 'normal',
+            originalPrice: item.originalPrice,
+            bundleType: item.bundleType,
+            bundleQty: item.bundleQty,
+            flatGroupName: item.flatGroupName,
+            memberPrice: item.memberPrice,
+            endsAt: item.endsAt,
+            cardLabel: item.cardLabel,
+            cardDiscountType: item.cardDiscountType,
+            cardDiscountValue: item.cardDiscountValue,
+            cardConditionNote: item.cardConditionNote,
+            note: item.memo,
           };
           await priceApi.create(dto);
           succeededIndicesRef.current.push(i);
@@ -123,6 +136,18 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
       initialHasEvent: item.eventStart !== undefined || item.eventEnd !== undefined,
       initialEventStart: item.eventStart,
       initialEventEnd: item.eventEnd,
+      // ── PriceTag 편집 복원용 (누락 시 수정 후 저장하면 priceTagType이 'normal'로 초기화됨) ──
+      initialPriceTagType: item.priceTagType,
+      initialOriginalPrice: item.originalPrice,
+      initialBundleType: item.bundleType,
+      initialBundleQty: item.bundleQty,
+      initialFlatGroupName: item.flatGroupName,
+      initialMemberPrice: item.memberPrice,
+      initialEndsAt: item.endsAt,
+      initialCardLabel: item.cardLabel,
+      initialCardDiscountType: item.cardDiscountType,
+      initialCardDiscountValue: item.cardDiscountValue,
+      initialCardConditionNote: item.cardConditionNote,
     });
   }, [items, navigation]);
 

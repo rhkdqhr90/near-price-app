@@ -8,10 +8,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { PriceRegisterScreenProps } from '../../navigation/types';
-import type { UnitType } from '../../types/api.types';
+import type {
+  BundleType,
+  CardDiscountType,
+  PriceTagType,
+  UnitType,
+} from '../../types/api.types';
 import { usePriceRegisterStore } from '../../store/priceRegisterStore';
 import { useSearchProducts } from '../../hooks/queries/useProducts';
-import { colors } from '../../theme/colors';
+import { colors, priceTagGradients } from '../../theme';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import CameraIcon from '../../components/icons/CameraIcon';
@@ -20,6 +25,28 @@ import ChevronUpIcon from '../../components/icons/ChevronUpIcon';
 import { getUnitLabel } from '../../utils/unitLabel';
 
 type Props = PriceRegisterScreenProps<'ItemDetail'>;
+
+const PRICE_TAG_OPTIONS: { label: string; value: PriceTagType }[] = [
+  { label: '일반가', value: 'normal' },
+  { label: '할인가', value: 'sale' },
+  { label: '특가', value: 'special' },
+  { label: '마감할인', value: 'closing' },
+  { label: '묶음', value: 'bundle' },
+  { label: '균일가', value: 'flat' },
+  { label: '회원가', value: 'member' },
+  { label: '카드할인', value: 'cardPayment' },
+];
+
+const BUNDLE_OPTIONS: { label: string; value: BundleType; qty: number }[] = [
+  { label: '1+1', value: '1+1', qty: 2 },
+  { label: '2+1', value: '2+1', qty: 3 },
+  { label: '3+1', value: '3+1', qty: 4 },
+];
+
+const CARD_DISCOUNT_OPTIONS: { label: string; value: CardDiscountType }[] = [
+  { label: '원 할인', value: 'amount' },
+  { label: '% 할인', value: 'percent' },
+];
 
 const UNIT_OPTIONS: { label: string; value: UnitType }[] = [
   { label: 'kg', value: 'kg' },
@@ -42,6 +69,15 @@ interface FormErrors {
   productName?: string;
   price?: string;
   eventDate?: string;
+  // 가격표 타입별 필수 필드 에러
+  originalPrice?: string;
+  bundleType?: string;
+  flatGroupName?: string;
+  memberPrice?: string;
+  endsAt?: string;
+  cardLabel?: string;
+  cardDiscountType?: string;
+  cardDiscountValue?: string;
 }
 
 /** YYYY-MM-DD 포맷 파서 */
@@ -73,6 +109,17 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     initialEventStart,
     initialEventEnd,
     initialProductId,
+    initialPriceTagType,
+    initialOriginalPrice,
+    initialBundleType,
+    initialBundleQty,
+    initialFlatGroupName,
+    initialMemberPrice,
+    initialEndsAt,
+    initialCardLabel,
+    initialCardDiscountType,
+    initialCardDiscountValue,
+    initialCardConditionNote,
   } = route.params;
 
   const { storeName, addItem, updateItem, items } = usePriceRegisterStore();
@@ -90,6 +137,30 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [productId, setProductId] = useState<string | undefined>(initialProductId);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── 가격표(PriceTag) 상태 ──
+  const [priceTagType, setPriceTagType] = useState<PriceTagType>(
+    initialPriceTagType ?? 'normal',
+  );
+  const [originalPrice, setOriginalPrice] = useState(
+    initialOriginalPrice != null ? String(initialOriginalPrice) : '',
+  );
+  const [bundleType, setBundleType] = useState<BundleType | undefined>(initialBundleType);
+  const [bundleQty, setBundleQty] = useState<number | undefined>(initialBundleQty);
+  const [flatGroupName, setFlatGroupName] = useState(initialFlatGroupName ?? '');
+  const [memberPrice, setMemberPrice] = useState(
+    initialMemberPrice != null ? String(initialMemberPrice) : '',
+  );
+  const [endsAt, setEndsAt] = useState(initialEndsAt ?? '');
+  const [cardLabel, setCardLabel] = useState(initialCardLabel ?? '');
+  const [cardDiscountType, setCardDiscountType] = useState<CardDiscountType | undefined>(
+    initialCardDiscountType,
+  );
+  const [cardDiscountValue, setCardDiscountValue] = useState(
+    initialCardDiscountValue != null ? String(initialCardDiscountValue) : '',
+  );
+  const [cardConditionNote, setCardConditionNote] = useState(initialCardConditionNote ?? '');
+  const [showEndsAtPicker, setShowEndsAtPicker] = useState(false);
 
   // 인라인 에러 상태
   const [errors, setErrors] = useState<FormErrors>({});
@@ -186,6 +257,50 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       hasError = true;
     }
 
+    // ── 가격표 타입별 필수 필드 검증 ──
+    const originalPriceNum = parseInt(originalPrice, 10);
+    const memberPriceNum = parseInt(memberPrice, 10);
+    const cardDiscountValueNum = parseInt(cardDiscountValue, 10);
+
+    if (priceTagType === 'sale' || priceTagType === 'closing' || priceTagType === 'cardPayment') {
+      if (!originalPrice || isNaN(originalPriceNum) || originalPriceNum <= 0) {
+        newErrors.originalPrice = '원가를 입력해주세요.';
+        hasError = true;
+      }
+    }
+    if (priceTagType === 'bundle' && !bundleType) {
+      newErrors.bundleType = '묶음 타입을 선택해주세요.';
+      hasError = true;
+    }
+    if (priceTagType === 'flat' && !flatGroupName.trim()) {
+      newErrors.flatGroupName = '균일가 그룹명을 입력해주세요.';
+      hasError = true;
+    }
+    if (priceTagType === 'member') {
+      if (!memberPrice || isNaN(memberPriceNum) || memberPriceNum <= 0) {
+        newErrors.memberPrice = '비회원가를 입력해주세요.';
+        hasError = true;
+      }
+    }
+    if (priceTagType === 'closing' && !endsAt) {
+      newErrors.endsAt = '마감 시각을 선택해주세요.';
+      hasError = true;
+    }
+    if (priceTagType === 'cardPayment') {
+      if (!cardLabel.trim()) {
+        newErrors.cardLabel = '카드명을 입력해주세요.';
+        hasError = true;
+      }
+      if (!cardDiscountType) {
+        newErrors.cardDiscountType = '할인 타입을 선택해주세요.';
+        hasError = true;
+      }
+      if (!cardDiscountValue || isNaN(cardDiscountValueNum) || cardDiscountValueNum <= 0) {
+        newErrors.cardDiscountValue = '할인 값을 입력해주세요.';
+        hasError = true;
+      }
+    }
+
     if (hasError) {
       setErrors(newErrors);
       return;
@@ -205,6 +320,24 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       memo: memo.trim() || undefined,
       eventStart: hasEvent ? eventStart : undefined,
       eventEnd: hasEvent ? eventEnd : undefined,
+      // ── 가격표 필드 ──
+      priceTagType,
+      originalPrice:
+        priceTagType === 'sale' || priceTagType === 'closing' || priceTagType === 'cardPayment'
+          ? originalPriceNum
+          : undefined,
+      bundleType: priceTagType === 'bundle' ? bundleType : undefined,
+      bundleQty: priceTagType === 'bundle' ? bundleQty : undefined,
+      flatGroupName: priceTagType === 'flat' ? flatGroupName.trim() : undefined,
+      memberPrice: priceTagType === 'member' ? memberPriceNum : undefined,
+      endsAt: priceTagType === 'closing' ? endsAt : undefined,
+      cardLabel: priceTagType === 'cardPayment' ? cardLabel.trim() : undefined,
+      cardDiscountType: priceTagType === 'cardPayment' ? cardDiscountType : undefined,
+      cardDiscountValue: priceTagType === 'cardPayment' ? cardDiscountValueNum : undefined,
+      cardConditionNote:
+        priceTagType === 'cardPayment' && cardConditionNote.trim()
+          ? cardConditionNote.trim()
+          : undefined,
     };
 
     if (editIndex !== undefined) {
@@ -224,6 +357,9 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [
     productName, price, productId, selectedUnit, quantity,
     imageUri, hasEvent, eventStart, eventEnd, quality, memo,
+    priceTagType, originalPrice, bundleType, bundleQty, flatGroupName,
+    memberPrice, endsAt, cardLabel, cardDiscountType, cardDiscountValue,
+    cardConditionNote,
     editIndex, addItem, updateItem, navigation,
   ]);
 
@@ -315,6 +451,303 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : null}
         </View>
 
+        {/* ── 가격표(PriceTag) 타입 선택 ── */}
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>가격표 타입</Text>
+          <View style={styles.chipRow}>
+            {PRICE_TAG_OPTIONS.map((opt) => {
+              const active = priceTagType === opt.value;
+              const gradient = priceTagGradients[opt.value];
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.chip,
+                    active && { backgroundColor: gradient[0], borderColor: gradient[1] },
+                  ]}
+                  onPress={() => {
+                    // 타입 전환 시 이전 타입 전용 필드 초기화 (동일 세션 내 의도치 않은 값 복원 방지)
+                    setPriceTagType(opt.value);
+                    if (opt.value !== 'sale' && opt.value !== 'closing' && opt.value !== 'cardPayment') {
+                      setOriginalPrice('');
+                    }
+                    if (opt.value !== 'bundle') {
+                      setBundleType(undefined);
+                      setBundleQty(undefined);
+                    }
+                    if (opt.value !== 'flat') setFlatGroupName('');
+                    if (opt.value !== 'member') setMemberPrice('');
+                    if (opt.value !== 'closing') setEndsAt('');
+                    if (opt.value !== 'cardPayment') {
+                      setCardLabel('');
+                      setCardDiscountType(undefined);
+                      setCardDiscountValue('');
+                      setCardConditionNote('');
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`가격표 ${opt.label}`}
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* sale / closing / cardPayment → 원가 */}
+          {(priceTagType === 'sale' ||
+            priceTagType === 'closing' ||
+            priceTagType === 'cardPayment') && (
+            <View style={styles.priceTagSubField}>
+              <Text style={styles.fieldLabel}>원가 *</Text>
+              <View style={styles.priceRow}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.priceInput,
+                    errors.originalPrice ? styles.inputError : undefined,
+                  ]}
+                  value={originalPrice}
+                  onChangeText={(v) => {
+                    setOriginalPrice(v.replace(/[^0-9]/g, ''));
+                    setErrors((e) => ({ ...e, originalPrice: undefined }));
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numeric"
+                  accessibilityLabel="원가"
+                />
+                <Text style={styles.priceSuffix}>원</Text>
+              </View>
+              {errors.originalPrice ? (
+                <Text style={styles.errorText}>{errors.originalPrice}</Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* bundle → bundleType */}
+          {priceTagType === 'bundle' && (
+            <View style={styles.priceTagSubField}>
+              <Text style={styles.fieldLabel}>묶음 타입 *</Text>
+              <View style={styles.chipRow}>
+                {BUNDLE_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.chip, bundleType === opt.value && styles.chipActive]}
+                    onPress={() => {
+                      setBundleType(opt.value);
+                      setBundleQty(opt.qty);
+                      setErrors((e) => ({ ...e, bundleType: undefined }));
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`묶음 ${opt.label}`}
+                    accessibilityState={{ selected: bundleType === opt.value }}
+                  >
+                    <Text
+                      style={[styles.chipText, bundleType === opt.value && styles.chipTextActive]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {errors.bundleType ? (
+                <Text style={styles.errorText}>{errors.bundleType}</Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* flat → flatGroupName */}
+          {priceTagType === 'flat' && (
+            <View style={styles.priceTagSubField}>
+              <Text style={styles.fieldLabel}>균일가 그룹명 *</Text>
+              <TextInput
+                style={[styles.input, errors.flatGroupName ? styles.inputError : undefined]}
+                value={flatGroupName}
+                onChangeText={(v) => {
+                  setFlatGroupName(v);
+                  if (v.trim()) setErrors((e) => ({ ...e, flatGroupName: undefined }));
+                }}
+                placeholder="예: 5000원 균일"
+                placeholderTextColor={colors.gray400}
+                maxLength={50}
+                accessibilityLabel="균일가 그룹명"
+              />
+              {errors.flatGroupName ? (
+                <Text style={styles.errorText}>{errors.flatGroupName}</Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* member → memberPrice */}
+          {priceTagType === 'member' && (
+            <View style={styles.priceTagSubField}>
+              <Text style={styles.fieldLabel}>비회원가 *</Text>
+              <View style={styles.priceRow}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.priceInput,
+                    errors.memberPrice ? styles.inputError : undefined,
+                  ]}
+                  value={memberPrice}
+                  onChangeText={(v) => {
+                    setMemberPrice(v.replace(/[^0-9]/g, ''));
+                    setErrors((e) => ({ ...e, memberPrice: undefined }));
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numeric"
+                  accessibilityLabel="비회원가"
+                />
+                <Text style={styles.priceSuffix}>원</Text>
+              </View>
+              {errors.memberPrice ? (
+                <Text style={styles.errorText}>{errors.memberPrice}</Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* closing → endsAt */}
+          {priceTagType === 'closing' && (
+            <View style={styles.priceTagSubField}>
+              <Text style={styles.fieldLabel}>마감 시각 *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.datePickerBtn,
+                  errors.endsAt ? styles.inputError : undefined,
+                ]}
+                onPress={() => setShowEndsAtPicker(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={endsAt ? `마감 ${endsAt}` : '마감 시각 선택'}
+              >
+                <Text style={[styles.datePickerText, !endsAt && styles.datePickerPlaceholder]}>
+                  {endsAt
+                    ? new Date(endsAt).toLocaleString('ko-KR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        month: 'short',
+                        day: 'numeric',
+                      })
+                    : '마감 시각 선택'}
+                </Text>
+              </TouchableOpacity>
+              {errors.endsAt ? <Text style={styles.errorText}>{errors.endsAt}</Text> : null}
+              {showEndsAtPicker && (
+                <DateTimePicker
+                  value={endsAt ? new Date(endsAt) : new Date()}
+                  mode="datetime"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(_: DateTimePickerEvent, date?: Date) => {
+                    setShowEndsAtPicker(Platform.OS === 'ios');
+                    if (date) {
+                      setEndsAt(date.toISOString());
+                      setErrors((e) => ({ ...e, endsAt: undefined }));
+                    }
+                  }}
+                  locale="ko"
+                  minimumDate={new Date()}
+                />
+              )}
+            </View>
+          )}
+
+          {/* cardPayment → cardLabel + type + value + note */}
+          {priceTagType === 'cardPayment' && (
+            <>
+              <View style={styles.priceTagSubField}>
+                <Text style={styles.fieldLabel}>카드명 *</Text>
+                <TextInput
+                  style={[styles.input, errors.cardLabel ? styles.inputError : undefined]}
+                  value={cardLabel}
+                  onChangeText={(v) => {
+                    setCardLabel(v);
+                    if (v.trim()) setErrors((e) => ({ ...e, cardLabel: undefined }));
+                  }}
+                  placeholder="예: 신한카드, 현대 M포인트"
+                  placeholderTextColor={colors.gray400}
+                  maxLength={50}
+                  accessibilityLabel="카드명"
+                />
+                {errors.cardLabel ? (
+                  <Text style={styles.errorText}>{errors.cardLabel}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.priceTagSubField}>
+                <Text style={styles.fieldLabel}>할인 방식 *</Text>
+                <View style={styles.chipRow}>
+                  {CARD_DISCOUNT_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.chip, cardDiscountType === opt.value && styles.chipActive]}
+                      onPress={() => {
+                        setCardDiscountType(opt.value);
+                        setErrors((e) => ({ ...e, cardDiscountType: undefined }));
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected: cardDiscountType === opt.value }}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          cardDiscountType === opt.value && styles.chipTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {errors.cardDiscountType ? (
+                  <Text style={styles.errorText}>{errors.cardDiscountType}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.priceTagSubField}>
+                <Text style={styles.fieldLabel}>
+                  할인 값 * {cardDiscountType === 'percent' ? '(%)' : '(원)'}
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    errors.cardDiscountValue ? styles.inputError : undefined,
+                  ]}
+                  value={cardDiscountValue}
+                  onChangeText={(v) => {
+                    setCardDiscountValue(v.replace(/[^0-9]/g, ''));
+                    setErrors((e) => ({ ...e, cardDiscountValue: undefined }));
+                  }}
+                  placeholder="0"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numeric"
+                  accessibilityLabel="할인 값"
+                />
+                {errors.cardDiscountValue ? (
+                  <Text style={styles.errorText}>{errors.cardDiscountValue}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.priceTagSubField}>
+                <Text style={styles.fieldLabel}>조건 메모 (선택)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={cardConditionNote}
+                  onChangeText={setCardConditionNote}
+                  placeholder="예: 3만원 이상 결제 시"
+                  placeholderTextColor={colors.gray400}
+                  maxLength={100}
+                  accessibilityLabel="조건 메모"
+                />
+              </View>
+            </>
+          )}
+        </View>
 
         {/* 이벤트/할인 */}
         <View style={styles.field}>
@@ -567,6 +1000,13 @@ const styles = StyleSheet.create({
   priceInput: { flex: 1 },
   priceSuffix: { ...typography.headingMd, color: colors.gray600 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  priceTagSubField: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.gray100,
+    gap: spacing.sm,
+  },
   chip: { backgroundColor: colors.gray100, borderRadius: spacing.radiusFull, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   chipActive: { backgroundColor: colors.primary },
   chipText: { ...typography.tagText, color: colors.gray600 },

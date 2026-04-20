@@ -165,6 +165,19 @@ export interface CreatePriceDto {
   saleStartDate?: string;
   saleEndDate?: string;
   condition?: string;
+  // ── 가격표(PriceTag) 필드 ──
+  priceTagType?: PriceTagType;
+  originalPrice?: number;
+  bundleType?: BundleType;
+  bundleQty?: number;
+  flatGroupName?: string;
+  memberPrice?: number;
+  endsAt?: string; // ISO
+  cardLabel?: string;
+  cardDiscountType?: CardDiscountType;
+  cardDiscountValue?: number;
+  cardConditionNote?: string;
+  note?: string;
 }
 
 export interface UpdatePriceDto {
@@ -451,6 +464,47 @@ export interface OwnerPostResponse {
   updatedAt: string;
 }
 
+// ─── PriceTag (가격표 시스템) ─────────────────────────────────────────────
+// API: src/price/entities/price.entity.ts 와 반드시 동기화
+
+export type PriceTagType =
+  | 'normal'
+  | 'sale'
+  | 'special'
+  | 'closing'
+  | 'bundle'
+  | 'flat'
+  | 'member'
+  | 'cardPayment';
+
+export type BundleType = '1+1' | '2+1' | '3+1';
+export type CardDiscountType = 'amount' | 'percent';
+
+export interface PriceTag {
+  type: PriceTagType;
+  originalPrice: number | null;
+  bundleType: BundleType | null;
+  bundleQty: number | null;
+  flatGroupName: string | null;
+  memberPrice: number | null;
+  endsAt: string | null; // ISO
+  cardLabel: string | null;
+  cardDiscountType: CardDiscountType | null;
+  cardDiscountValue: number | null;
+  cardConditionNote: string | null;
+  note: string | null;
+}
+
+export interface PriceSignals {
+  storeCount: number;
+  minPrice: number;
+  maxPrice: number;
+  avgPrice: number | null;
+  isLowest7d: boolean;
+  hasClosingDiscount: boolean;
+  verificationCount: number;
+}
+
 // ─── ProductPriceCard (홈 무한스크롤용 상품별 집계) ──────────────────────────
 
 export interface ProductPriceCard {
@@ -472,6 +526,9 @@ export interface ProductPriceCard {
   verificationCount: number;
   createdAt: string;
   registrant: { nickname: string; profileImageUrl: string | null } | null;
+  // ── 가격표(PriceTag) 시스템 ──
+  priceTag: PriceTag;
+  signals: PriceSignals;
 }
 
 // ─── StoreReview ──────────────────────────────────────────────────────────
@@ -487,6 +544,44 @@ export interface StoreReviewResponse {
 export interface CreateStoreReviewDto {
   rating: number;
   comment?: string;
+}
+
+// ─── Notification (앱 알림) ───────────────────────────────────────────────
+
+export type NotificationType =
+  | 'priceVerified'
+  | 'priceDisputed'
+  | 'newNearbyPrice'
+  | 'wishlistLowered'
+  | 'system';
+
+export type NotificationLinkType =
+  | 'price'
+  | 'product'
+  | 'store'
+  | 'notice'
+  | 'url';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  linkType: NotificationLinkType | null;
+  linkId: string | null;
+  imageUrl: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  items: AppNotification[];
+  nextCursor: string | null;
+}
+
+export interface UnreadCountResponse {
+  count: number;
 }
 
 // ─── Common ────────────────────────────────────────────────────────────────

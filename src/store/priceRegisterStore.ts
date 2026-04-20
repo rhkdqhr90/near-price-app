@@ -1,7 +1,27 @@
 import { create } from 'zustand';
-import type { UnitType } from '../types/api.types';
+import type {
+  BundleType,
+  CardDiscountType,
+  PriceTagType,
+  UnitType,
+} from '../types/api.types';
 
-export interface ConfirmItem {
+/** 가격표(PriceTag) 관련 드래프트 필드 (ConfirmItem / DraftFormData 공통) */
+export interface PriceTagDraftFields {
+  priceTagType?: PriceTagType;
+  originalPrice?: number;
+  bundleType?: BundleType;
+  bundleQty?: number;
+  flatGroupName?: string;
+  memberPrice?: number;
+  endsAt?: string; // ISO
+  cardLabel?: string;
+  cardDiscountType?: CardDiscountType;
+  cardDiscountValue?: number;
+  cardConditionNote?: string;
+}
+
+export interface ConfirmItem extends PriceTagDraftFields {
   key: string;
   productId?: string;
   productName: string;
@@ -17,7 +37,7 @@ export interface ConfirmItem {
 }
 
 /** 현재 작성 중인 폼의 드래프트 데이터 */
-export interface DraftFormData {
+export interface DraftFormData extends PriceTagDraftFields {
   productName?: string;
   price?: string;
   unitType?: UnitType;

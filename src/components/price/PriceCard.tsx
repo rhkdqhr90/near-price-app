@@ -1,0 +1,262 @@
+import React from 'react';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
+import { colors } from '../../theme';
+import { PJS } from '../../theme/typography';
+import { formatPrice, formatRelativeTime } from '../../utils/format';
+import type { ProductPriceCard } from '../../types/api.types';
+import { PriceTag } from './PriceTag';
+
+interface PriceCardProps {
+  item: ProductPriceCard;
+  onPress?: (productId: string) => void;
+  style?: ViewStyle;
+}
+
+/**
+ * PriceCard — 홈 무한스크롤 상품 카드.
+ *
+ * 좌측: 이미지 + (상품명 + PriceTag 뱃지 + 스토어/거리/시간 + 등록자)
+ * 우측: 현재가 + 원가 취소선(있을 때) + 비교 칩(n곳 · −savings%)
+ * 하단: 가격대 진행바 (signals.minPrice vs item.price 위치 표시)
+ */
+function PriceCardBase({ item, onPress, style }: PriceCardProps) {
+  const { priceTag, signals } = item;
+  const originalPrice = priceTag.originalPrice;
+  const savings =
+    originalPrice && originalPrice > item.minPrice
+      ? Math.round((1 - item.minPrice / originalPrice) * 100)
+      : null;
+
+  const storeName = item.cheapestStore?.name ?? '매장';
+  const registrantName = item.registrant?.nickname ?? '익명';
+  const relativeTime = formatRelativeTime(item.createdAt);
+
+  // 진행바: minPrice → maxPrice 사이 비율 (최저가는 0, 최고가는 1)
+  // 홈에서 최저가 카드만 보이므로 현재가는 항상 minPrice (= 0% 위치).
+  // 시각적 의미: 얼마나 최저가에 가까운가 (현재는 항상 0 위치)
+  const range = signals.maxPrice - signals.minPrice;
+  const positionPct =
+    range > 0 ? ((item.minPrice - signals.minPrice) / range) * 100 : 0;
+
+  return (
+    <Pressable
+      onPress={() => onPress?.(item.productId)}
+      style={({ pressed }) => [
+        styles.card,
+        pressed && styles.cardPressed,
+        style,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.productName} ${formatPrice(item.minPrice)}원`}
+    >
+      <View style={styles.row}>
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.image} />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.imagePlaceholderText}>
+              {item.productName.slice(0, 1)}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text style={styles.productName} numberOfLines={1}>
+              {item.productName}
+            </Text>
+            <PriceTag priceTag={priceTag} variant="compact" />
+          </View>
+
+          <Text style={styles.meta} numberOfLines={1}>
+            {storeName} · {relativeTime}
+          </Text>
+
+          <Text style={styles.contributor} numberOfLines={1}>
+            @{registrantName}
+            {signals.isLowest7d ? '  ·  7일 내 최저' : ''}
+          </Text>
+        </View>
+
+        <View style={styles.priceCol}>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceNumber}>{formatPrice(item.minPrice)}</Text>
+            <Text style={styles.priceWon}>원</Text>
+          </View>
+          {originalPrice ? (
+            <Text style={styles.original}>{formatPrice(originalPrice)}원</Text>
+          ) : null}
+          <View style={styles.compareChip}>
+            <Text style={styles.compareChipText}>
+              {signals.storeCount}곳
+              {savings ? ` · −${savings}%` : ''}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {range > 0 && (
+        <View style={styles.barWrap}>
+          <View style={styles.barTrack}>
+            <View
+              style={[
+                styles.barFill,
+                {
+                  width: `${Math.max(4, 100 - positionPct)}%`,
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.barLabels}>
+            <Text style={styles.barLabel}>
+              최저 {formatPrice(signals.minPrice)}
+            </Text>
+            <Text style={styles.barLabel}>
+              최고 {formatPrice(signals.maxPrice)}
+            </Text>
+          </View>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+export const PriceCard = React.memo(PriceCardBase);
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    shadowColor: colors.shadowBase,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  cardPressed: {
+    opacity: 0.88,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: 12,
+  },
+  image: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceContainerLow,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderText: {
+    fontFamily: PJS.bold,
+    fontSize: 22,
+    color: colors.gray400,
+  },
+  body: {
+    flex: 1,
+    minWidth: 0,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: 6,
+    flexWrap: 'wrap',
+  },
+  productName: {
+    fontFamily: PJS.bold,
+    fontSize: 15,
+    color: colors.onBackground,
+    letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  meta: {
+    fontFamily: PJS.regular,
+    fontSize: 12,
+    color: colors.gray600,
+    marginTop: 4,
+  },
+  contributor: {
+    fontFamily: PJS.medium,
+    fontSize: 11,
+    color: colors.gray400,
+    marginTop: 6,
+  },
+  priceCol: {
+    alignItems: 'flex-end',
+    minWidth: 92,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    columnGap: 1,
+  },
+  priceNumber: {
+    fontFamily: PJS.extraBold,
+    fontSize: 22,
+    color: colors.onBackground,
+    letterSpacing: -0.6,
+    lineHeight: 24,
+  },
+  priceWon: {
+    fontFamily: PJS.bold,
+    fontSize: 12,
+    color: colors.onBackground,
+  },
+  original: {
+    fontFamily: PJS.regular,
+    fontSize: 11,
+    color: colors.cardPriceStrike,
+    marginTop: 4,
+    textDecorationLine: 'line-through',
+  },
+  compareChip: {
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: colors.primaryLight,
+  },
+  compareChipText: {
+    fontFamily: PJS.extraBold,
+    fontSize: 10,
+    color: colors.primaryDark,
+  },
+  barWrap: {
+    marginTop: 12,
+  },
+  barTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.surfaceContainerHigh,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  barLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  barLabel: {
+    fontFamily: PJS.medium,
+    fontSize: 10,
+    color: colors.gray400,
+  },
+});

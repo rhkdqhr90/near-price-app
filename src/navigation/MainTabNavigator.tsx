@@ -21,6 +21,7 @@ import PriceCompareScreen from '../screens/price/PriceCompareScreen';
 import PriceDetailScreen from '../screens/price/PriceDetailScreen';
 import StoreDetailScreen from '../screens/price/StoreDetailScreen';
 import StoreInfoScreen from '../screens/price/StoreInfoScreen';
+import NotificationListScreen from '../screens/notification/NotificationListScreen';
 import StoreSelectScreen from '../screens/price/StoreSelectScreen';
 import StoreRegisterScreen from '../screens/price/StoreRegisterScreen';
 import InputMethodScreen from '../screens/price/InputMethodScreen';
@@ -89,6 +90,11 @@ const HomeStackNavigator: React.FC = () => (
       name="StoreInfo"
       component={StoreInfoScreen}
       options={{ headerShown: false }}
+    />
+    <HomeStack.Screen
+      name="Notifications"
+      component={NotificationListScreen}
+      options={{ title: '알림' }}
     />
   </HomeStack.Navigator>
 );

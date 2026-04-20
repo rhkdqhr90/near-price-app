@@ -53,6 +53,7 @@ export type HomeStackParamList = {
   PriceDetail: { priceId: string };
   StoreDetail: { storeId: string };
   StoreInfo: { storeId: string };
+  Notifications: undefined;
 };
 
 // ─── Price Register Stack ──────────────────────────────────────────────────
@@ -78,6 +79,18 @@ export type PriceRegisterStackParamList = {
     initialEventStart?: string;
     initialEventEnd?: string;
     initialProductId?: string;
+    // ── 가격표(PriceTag) 편집용 초기값 ──
+    initialPriceTagType?: import('../types/api.types').PriceTagType;
+    initialOriginalPrice?: number;
+    initialBundleType?: import('../types/api.types').BundleType;
+    initialBundleQty?: number;
+    initialFlatGroupName?: string;
+    initialMemberPrice?: number;
+    initialEndsAt?: string;
+    initialCardLabel?: string;
+    initialCardDiscountType?: import('../types/api.types').CardDiscountType;
+    initialCardDiscountValue?: number;
+    initialCardConditionNote?: string;
   };
   Confirm: undefined;
 };

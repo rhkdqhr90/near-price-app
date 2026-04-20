@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
-  Image,
   FlatList,
   Pressable,
   TouchableOpacity,
@@ -16,12 +15,12 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { HomeScreenProps, MainTabParamList } from '../../navigation/types';
-import { colors } from '../../theme/colors';
+import { colors, priceTagGradients } from '../../theme';
 import { spacing } from '../../theme/spacing';
 import { typography, PJS } from '../../theme/typography';
 import { useInfiniteRecentPrices } from '../../hooks/queries/usePrices';
 import { useFlyers } from '../../hooks/queries/useFlyers';
-import { useAddWishlist } from '../../hooks/queries/useWishlist';
+import { useUnreadNotificationCount } from '../../hooks/queries/useNotifications';
 import { useLocationStore } from '../../store/locationStore';
 import EmptyState from '../../components/common/EmptyState';
 import SkeletonCard from '../../components/common/SkeletonCard';
@@ -31,103 +30,13 @@ import SearchIcon from '../../components/icons/SearchIcon';
 import BellIcon from '../../components/icons/BellIcon';
 import MapPinIcon from '../../components/icons/MapPinIcon';
 import ChevronDownIcon from '../../components/icons/ChevronDownIcon';
-import StoreIcon from '../../components/icons/StoreIcon';
+import { PriceCard } from '../../components/price/PriceCard';
+import { getPriceTagLabel } from '../../components/price/PriceTag';
 import type { ProductPriceCard } from '../../types/api.types';
-import { formatPrice, getDistanceM, fixImageUrl, formatRelativeTime } from '../../utils/format';
+import { formatPrice, getDistanceM, formatRelativeTime } from '../../utils/format';
 import { POPULAR_TAGS, DEFAULT_FLYER_STORE_NAME } from '../../utils/constants';
 
 type Props = HomeScreenProps<'Home'>;
-
-// ─── FeedCardImage (이미지 onError 패턴) ─────────────────────────────────────
-interface FeedCardImageProps {
-  uri: string | null;
-  productName: string;
-}
-
-const FeedCardImage = React.memo(({ uri, productName }: FeedCardImageProps) => {
-  const [failed, setFailed] = useState(false);
-  if (!uri || failed) {
-    return (
-      <View style={styles.feedImgPlaceholder}>
-        <TagIcon size={26} color={colors.gray400} />
-      </View>
-    );
-  }
-  return (
-    <Image
-      source={{ uri }}
-      style={StyleSheet.absoluteFillObject}
-      resizeMode="cover"
-      accessible={true}
-      accessibilityLabel={`${productName} 상품 이미지`}
-      onError={() => setFailed(true)}
-    />
-  );
-});
-
-// ─── FeedCard (단일 컬럼 피드 카드) ──────────────────────────────────────────
-interface FeedCardProps {
-  item: ProductPriceCard;
-  onPress: (card: ProductPriceCard) => void;
-  onWishlist: (productId: string) => void;
-}
-
-const FeedCard = React.memo(({ item, onPress, onWishlist }: FeedCardProps) => {
-  const imageUri = fixImageUrl(item.imageUrl);
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.feedCard, pressed && styles.feedCardPressed]}
-      onPress={() => onPress(item)}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.productName} ${formatPrice(item.minPrice)}`}
-    >
-      {/* 이미지 */}
-      <View style={styles.feedImgWrap}>
-        <FeedCardImage uri={imageUri} productName={item.productName} />
-        {item.hasClosingDiscount && (
-          <View style={styles.feedDiscountBadge}>
-            <Text style={styles.feedDiscountBadgeText}>마감</Text>
-          </View>
-        )}
-      </View>
-
-      {/* 정보 영역 */}
-      <View style={styles.feedBody}>
-        <Text style={styles.feedProductName} numberOfLines={2}>{item.productName}</Text>
-        <Text style={styles.feedPrice}>{formatPrice(item.minPrice)}</Text>
-        <View style={styles.feedStoreRow}>
-          <StoreIcon size={spacing.iconXs} color={colors.gray400} />
-          <Text style={styles.feedStoreName} numberOfLines={1}>
-            {item.cheapestStore?.name ?? '매장 정보 없음'}
-          </Text>
-        </View>
-        {item.verificationCount > 0 && (
-          <View style={styles.feedVerifiedChip}>
-            <Text style={styles.feedVerifiedText}>✓ {item.verificationCount}명 확인</Text>
-          </View>
-        )}
-        {item.registrant && (
-          <Text style={styles.feedRegistrantText}>
-            @{item.registrant.nickname} · {formatRelativeTime(item.createdAt)}
-          </Text>
-        )}
-      </View>
-
-      {/* 찜 버튼 */}
-      <Pressable
-        style={styles.feedWishBtn}
-        onPress={(e) => {
-          e.stopPropagation();
-          onWishlist(item.productId);
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.productName} 찜하기`}
-      >
-        <Text style={styles.feedWishBtnText}>+</Text>
-      </Pressable>
-    </Pressable>
-  );
-});
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
@@ -139,10 +48,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const userLng = useLocationStore((s) => s.longitude);
   const radius = useLocationStore((s) => s.radius);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [heroImgFailed, setHeroImgFailed] = useState(false);
+  const [activeTagIdx, setActiveTagIdx] = useState<number | null>(null);
   const listRef = useRef<FlatList>(null);
-  const { mutate: addWishlist } = useAddWishlist();
   const { data: flyersData } = useFlyers();
+  const { data: unreadData } = useUnreadNotificationCount();
+  const unreadCount = unreadData?.count ?? 0;
 
   const radiusLabel = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
 
@@ -164,9 +74,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   } = useInfiniteRecentPrices();
 
   const recentPrices = useMemo(() => {
-    const all = recentData?.pages.flatMap(p => p.data) ?? [];
+    const all = recentData?.pages.flatMap((p) => p.data) ?? [];
     const seen = new Set<string>();
-    return all.filter(p => {
+    return all.filter((p) => {
       if (seen.has(p.productId)) return false;
       seen.add(p.productId);
       return true;
@@ -192,22 +102,24 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const featuredCard = useMemo(() => nearbyPrices[0] ?? null, [nearbyPrices]);
   const feedCards = useMemo(() => nearbyPrices.slice(1), [nearbyPrices]);
 
-  useEffect(() => {
-    setHeroImgFailed(false);
-  }, [featuredCard?.productId]);
-
-  const handleTagPress = useCallback((tag: string) => {
-    navigation.navigate('Search', { initialQuery: tag });
-  }, [navigation]);
+  const handleTagPress = useCallback(
+    (tag: string, idx: number) => {
+      setActiveTagIdx(idx);
+      navigation.navigate('Search', { initialQuery: tag });
+    },
+    [navigation],
+  );
 
   const handleCardPress = useCallback(
-    (card: ProductPriceCard) => {
+    (productId: string) => {
+      const card = nearbyPrices.find((p) => p.productId === productId);
+      if (!card) return;
       navigation.navigate('PriceCompare', {
         productId: card.productId,
         productName: card.productName,
       });
     },
-    [navigation],
+    [navigation, nearbyPrices],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -220,162 +132,56 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, [refetchRecent]);
 
   const handleNavigatePriceRegister = useCallback(() => {
-    navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('PriceRegisterStack', { screen: 'StoreSelect' });
+    navigation
+      .getParent<BottomTabNavigationProp<MainTabParamList>>()
+      ?.navigate('PriceRegisterStack', { screen: 'StoreSelect' });
   }, [navigation]);
-
-  const featuredImageUri = useMemo(
-    () => (featuredCard ? fixImageUrl(featuredCard.imageUrl) : null),
-    [featuredCard],
-  );
 
   const listHeader = useMemo(() => {
     return (
       <>
-        {/* ── 인기 태그 ── */}
+        {/* ── 히어로 그라디언트 카드 ── */}
+        {!isRecentLoading && !isRecentError && featuredCard && (
+          <HeroGradient card={featuredCard} onPress={handleCardPress} />
+        )}
+
+        {/* ── 인기 태그 (chips) ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tagsRow}
         >
-          {POPULAR_TAGS.map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              style={styles.tagChip}
-              onPress={() => handleTagPress(tag)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={`${tag} 태그 검색`}
-            >
-              <Text style={styles.tagText}>{tag}</Text>
-            </TouchableOpacity>
-          ))}
+          {POPULAR_TAGS.map((tag, idx) => {
+            const active = activeTagIdx === idx;
+            return (
+              <TouchableOpacity
+                key={tag}
+                style={[styles.tagChip, active && styles.tagChipActive]}
+                onPress={() => handleTagPress(tag, idx)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${tag} 태그 검색`}
+              >
+                <Text style={[styles.tagText, active && styles.tagTextActive]}>
+                  {tag}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
-        {/* ── 히어로 카드 ── */}
-        {!isRecentLoading && !isRecentError && featuredCard && (
-          <Pressable
-            style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
-            onPress={() => handleCardPress(featuredCard)}
-            accessibilityRole="button"
-            accessibilityLabel={`${featuredCard.productName} 이웃 추천 상품`}
-          >
-            {/* 이미지 영역 */}
-            <View style={styles.heroInnerCard}>
-              <View style={styles.heroImageWrap}>
-                {featuredImageUri && !heroImgFailed ? (
-                  <Image
-                    source={{ uri: featuredImageUri }}
-                    style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    accessible={true}
-                    accessibilityLabel={`${featuredCard.productName} 상품 이미지`}
-                    onError={() => setHeroImgFailed(true)}
-                  />
-                ) : (
-                  <LinearGradient
-                    colors={[colors.primaryDark, colors.primary]}
-                    style={[StyleSheet.absoluteFillObject, styles.heroGradientOverlay]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Text style={styles.heroGradientProductName} numberOfLines={2}>
-                      {featuredCard.productName}
-                    </Text>
-                    <Text style={styles.heroGradientPrice}>
-                      {formatPrice(featuredCard.minPrice)}
-                    </Text>
-                  </LinearGradient>
-                )}
-                {featuredCard.hasClosingDiscount && (
-                  <View style={styles.heroClosingBadge}>
-                    <Text style={styles.heroClosingBadgeText}>마감할인</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* 텍스트 영역 */}
-            <View style={styles.heroBody}>
-              <View style={styles.heroRow}>
-                <View style={styles.heroLeft}>
-                  <Text style={styles.heroProductName} numberOfLines={2}>
-                    {featuredCard.productName}
-                  </Text>
-                  <Text style={styles.heroStoreName} numberOfLines={1}>
-                    {featuredCard.cheapestStore?.name ?? '매장 정보 없음'}
-                  </Text>
-                  <Text style={styles.heroTime}>• {formatRelativeTime(featuredCard.createdAt)}</Text>
-                </View>
-                <View style={styles.heroRight}>
-                  <View style={styles.heroPriceRow}>
-                    <Text style={styles.heroPrice}>
-                      {featuredCard.minPrice.toLocaleString()}
-                    </Text>
-                    <Text style={styles.heroPriceUnit}>원</Text>
-                  </View>
-                  {featuredCard.storeCount > 1 && (
-                    <Text style={styles.heroLowestLabel}>7일 최저가</Text>
-                  )}
-                </View>
-              </View>
-
-              {/* 커뮤니티 정보 (검증 수 + 등록자) */}
-              {(featuredCard.verificationCount > 0 || featuredCard.registrant) && (
-                <View style={styles.heroCommunityRow}>
-                  {featuredCard.verificationCount > 0 && (
-                    <View style={styles.heroVerifiedChip}>
-                      <Text style={styles.heroVerifiedChipText}>✓ {featuredCard.verificationCount}명 확인</Text>
-                    </View>
-                  )}
-                  {featuredCard.registrant && (
-                    <Text style={styles.heroRegistrantText}>
-                      @{featuredCard.registrant.nickname}
-                    </Text>
-                  )}
-                </View>
-              )}
-            </View>
-          </Pressable>
-        )}
-
-        {/* ── 오늘의 전단지 배너 ── */}
-        <TouchableOpacity
-          style={styles.flyerBanner}
-          onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('Flyer', { screen: 'FlyerList' })}
-          activeOpacity={0.9}
-          accessibilityRole="button"
-          accessibilityLabel="오늘의 전단지 보기"
-        >
-          <View style={styles.flashBadgeWrap}>
-            <View style={styles.flashBadge}>
-              <Text style={styles.flashBadgeText}>FLASH SALE</Text>
-            </View>
-          </View>
-          <Text style={styles.flyerBannerTitle}>오늘의 전단지</Text>
-          <Text style={styles.flyerBannerSub}>
-            {flyersData?.[0]?.storeName ?? DEFAULT_FLYER_STORE_NAME} 최대 40% 할인
-          </Text>
-          <View style={styles.flyerFanWrap}>
-            <View style={[styles.flyerFanCard, styles.flyerFanLeft]}>
-              <Text style={styles.flyerFanEmoji}>🥦</Text>
-            </View>
-            <View style={[styles.flyerFanCard, styles.flyerFanCenter]}>
-              <Text style={styles.flyerFanEmoji}>🥩</Text>
-            </View>
-            <View style={[styles.flyerFanCard, styles.flyerFanRight]}>
-              <Text style={styles.flyerFanEmoji}>🍎</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* ── 최근 등록 가격 섹션 헤더 ── */}
+        {/* ── 섹션 헤더 ── */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>최근 등록 가격</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionTitle}>근처 최저가</Text>
+            <Text style={styles.sectionSub}>
+              {nearbyPrices.length}개 매장 · 반경 {radiusLabel}
+            </Text>
+          </View>
           <TouchableOpacity
             onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
             activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="전체보기"
+            style={styles.sectionMoreBtn}
           >
             <Text style={styles.sectionMoreText}>전체 →</Text>
           </TouchableOpacity>
@@ -405,19 +211,50 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       </>
     );
   }, [
-    handleTagPress,
     isRecentLoading,
     isRecentError,
-    nearbyPrices,
-    refetchRecent,
-    navigation,
     featuredCard,
-    featuredImageUri,
-    heroImgFailed,
     handleCardPress,
+    activeTagIdx,
+    handleTagPress,
+    nearbyPrices.length,
+    radiusLabel,
+    navigation,
+    refetchRecent,
     handleNavigatePriceRegister,
-    flyersData,
   ]);
+
+  const listFooter = useMemo(() => {
+    return (
+      <>
+        {isFetchingNextPage && (
+          <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
+        )}
+        {/* 전단지 배너 */}
+        <TouchableOpacity
+          style={styles.flyerBanner}
+          onPress={() =>
+            navigation
+              .getParent<BottomTabNavigationProp<MainTabParamList>>()
+              ?.navigate('Flyer', { screen: 'FlyerList' })
+          }
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="오늘의 전단지 보기"
+        >
+          <View style={styles.flyerDot} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.flashBadgeText}>FLASH SALE</Text>
+            <Text style={styles.flyerBannerTitle}>오늘의 전단지</Text>
+            <Text style={styles.flyerBannerSub}>
+              {flyersData?.[0]?.storeName ?? DEFAULT_FLYER_STORE_NAME} 최대 40% 할인
+            </Text>
+          </View>
+          <Text style={styles.flyerChev}>›</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }, [isFetchingNextPage, navigation, flyersData]);
 
   const containerStyle = useMemo(
     () => [styles.container, { paddingTop: insets.top }],
@@ -425,15 +262,20 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const listContentStyle = useMemo(
-    () => [styles.listContent, { paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.xl }],
+    () => [
+      styles.listContent,
+      { paddingBottom: insets.bottom + spacing.tabBarContentHeight + spacing.xl },
+    ],
     [insets.bottom],
   );
 
-  const renderFeedCard = useCallback(
+  const renderCard = useCallback(
     ({ item }: ListRenderItemInfo<ProductPriceCard>) => (
-      <FeedCard item={item} onPress={handleCardPress} onWishlist={addWishlist} />
+      <View style={styles.cardWrap}>
+        <PriceCard item={item} onPress={handleCardPress} />
+      </View>
     ),
-    [handleCardPress, addWishlist],
+    [handleCardPress],
   );
 
   return (
@@ -443,26 +285,51 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           style={styles.regionButton}
           activeOpacity={0.7}
-          onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
+          onPress={() =>
+            navigation
+              .getParent<BottomTabNavigationProp<MainTabParamList>>()
+              ?.navigate('MyPageStack', {
+                screen: 'LocationSetup',
+                params: { returnTo: 'mypage' },
+              })
+          }
           accessibilityRole="button"
           accessibilityLabel={`${regionName} 지역 변경`}
         >
           <MapPinIcon size={16} color={colors.primary} />
           <Text style={styles.regionText}>{regionName}</Text>
           <ChevronDownIcon size={13} color={colors.gray700} />
+          <View style={styles.radiusPill}>
+            <Text style={styles.radiusPillText}>{radiusLabel}</Text>
+          </View>
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          <Text style={styles.brandText}>마실</Text>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
+            accessibilityRole="button"
+            accessibilityLabel="검색"
+          >
+            <SearchIcon size={20} color={colors.black} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerIconBtn}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="알림"
-            onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('MyPageStack', {
-              screen: 'NotificationSettings',
-            })}
+            accessibilityLabel={
+              unreadCount > 0 ? `알림 ${unreadCount}개 안읽음` : '알림'
+            }
+            onPress={() => navigation.navigate('Notifications')}
           >
             <BellIcon size={22} color={colors.black} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -474,13 +341,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           onPress={() => navigation.navigate('Search', { initialQuery: undefined })}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="상품 이름을 검색하세요"
+          accessibilityLabel="오늘 뭐 살까? 품목 검색"
         >
           <SearchIcon size={18} color={colors.gray400} />
-          <Text style={styles.searchPlaceholder}>상품 이름을 검색하세요</Text>
-          <View style={styles.radiusPill}>
-            <Text style={styles.radiusPillText}>반경 {radiusLabel}</Text>
-          </View>
+          <Text style={styles.searchPlaceholder}>오늘 뭐 살까? · 품목 검색</Text>
         </TouchableOpacity>
       </View>
 
@@ -488,28 +352,37 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       {isRegionNameMissing && (
         <TouchableOpacity
           style={styles.locationBanner}
-          onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('MyPageStack', { screen: 'LocationSetup', params: { returnTo: 'mypage' } })}
+          onPress={() =>
+            navigation
+              .getParent<BottomTabNavigationProp<MainTabParamList>>()
+              ?.navigate('MyPageStack', {
+                screen: 'LocationSetup',
+                params: { returnTo: 'mypage' },
+              })
+          }
           activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="동네 설정하기"
         >
-          <Text style={styles.locationBannerText}>내 동네를 설정하면 주변 가격을 볼 수 있어요</Text>
+          <Text style={styles.locationBannerText}>
+            내 동네를 설정하면 주변 가격을 볼 수 있어요
+          </Text>
           <Text style={styles.locationBannerAction}>설정하기 →</Text>
         </TouchableOpacity>
       )}
 
-      {/* ── 메인 콘텐츠 (단일 컬럼 피드) ── */}
+      {/* ── 메인 피드 ── */}
       <FlatList
         ref={listRef}
         data={feedCards}
         keyExtractor={(item) => item.productId}
-        renderItem={renderFeedCard}
+        renderItem={renderCard}
         contentContainerStyle={listContentStyle}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={true}
-        onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+        }}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator style={styles.footerLoader} color={colors.primary} /> : null}
+        ListFooterComponent={listFooter}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -524,6 +397,98 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
+// ─── HeroGradient ──────────────────────────────────────────────────────────
+// screens-home.jsx의 HeroGradient 패턴을 PriceTag 시스템 색상으로 구현.
+// 가격표 타입별 그라디언트 → 등록된 가격표 타입에 맞는 색상으로 히어로 카드 렌더링.
+interface HeroGradientProps {
+  card: ProductPriceCard;
+  onPress: (productId: string) => void;
+}
+
+const HeroGradient = React.memo(({ card, onPress }: HeroGradientProps) => {
+  const { priceTag, signals } = card;
+  const gradient = priceTagGradients[priceTag.type];
+  const tagLabel = getPriceTagLabel(priceTag);
+
+  const originalPrice = priceTag.originalPrice;
+  const savings =
+    originalPrice && originalPrice > card.minPrice
+      ? Math.round((1 - card.minPrice / originalPrice) * 100)
+      : null;
+
+  const range = signals.maxPrice - signals.minPrice;
+  const positionPct =
+    range > 0 ? ((card.minPrice - signals.minPrice) / range) * 100 : 0;
+
+  return (
+    <Pressable
+      onPress={() => onPress(card.productId)}
+      style={({ pressed }) => [styles.heroWrap, pressed && styles.heroPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.productName} 오늘의 최저가`}
+    >
+      <LinearGradient
+        colors={[gradient[0], gradient[1]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroCard}
+      >
+        {/* 장식 원 */}
+        <View style={styles.heroDecorBig} />
+        <View style={styles.heroDecorSm} />
+
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroTagBadge}>
+            <Text style={styles.heroTagBadgeText}>{tagLabel}</Text>
+          </View>
+          <Text style={styles.heroTime}>· {formatRelativeTime(card.createdAt)}</Text>
+        </View>
+
+        <Text style={styles.heroProductName} numberOfLines={1}>
+          {card.productName}
+        </Text>
+        <Text style={styles.heroStoreName} numberOfLines={1}>
+          {card.cheapestStore?.name ?? '매장 정보 없음'}
+        </Text>
+
+        <View style={styles.heroPriceRow}>
+          <Text style={styles.heroPrice}>{formatPrice(card.minPrice)}</Text>
+          <Text style={styles.heroPriceUnit}>원</Text>
+          {savings && (
+            <View style={[styles.heroSavingsPill, { shadowColor: gradient[1] }]}>
+              <Text style={[styles.heroSavingsText, { color: gradient[1] }]}>
+                −{savings}%
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {range > 0 && (
+          <>
+            <View style={styles.heroBarTrack}>
+              <View
+                style={[
+                  styles.heroBarFill,
+                  { width: `${Math.max(6, 100 - positionPct)}%` },
+                ]}
+              />
+            </View>
+            <View style={styles.heroBarLabels}>
+              <Text style={styles.heroBarLabel}>
+                최저 {formatPrice(signals.minPrice)}
+              </Text>
+              <Text style={styles.heroBarLabel}>{signals.storeCount}곳 비교</Text>
+              <Text style={styles.heroBarLabel}>
+                최고 {formatPrice(signals.maxPrice)}
+              </Text>
+            </View>
+          </>
+        )}
+      </LinearGradient>
+    </Pressable>
+  );
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -537,69 +502,85 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    borderBottomWidth: spacing.borderThin,
-    borderBottomColor: colors.surfaceContainer,
+    paddingHorizontal: spacing.lg,
   },
   regionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 5,
   },
   regionText: {
-    fontSize: typography.body.fontSize,
-    fontWeight: '700' as const,
-    color: colors.primary,
+    fontFamily: PJS.bold,
+    fontSize: 16,
+    color: colors.black,
     letterSpacing: -0.3,
+  },
+  radiusPill: {
+    marginLeft: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: colors.primaryLight,
+  },
+  radiusPillText: {
+    fontFamily: PJS.bold,
+    fontSize: 10,
+    color: colors.primary,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-  },
-  brandText: {
-    fontSize: typography.bodySm.fontSize,
-    fontWeight: '800' as const,
-    color: colors.tertiary,
-    letterSpacing: -0.3,
+    gap: 2,
   },
   headerIconBtn: {
-    width: spacing.headerIconSize,
-    height: spacing.headerIconSize,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    fontFamily: PJS.bold,
+    fontSize: 9,
+    color: colors.white,
+    letterSpacing: -0.2,
   },
 
   // ─── 검색바 ─────────────────────────────────────────────────────────
   searchBarWrap: {
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
+    paddingTop: spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceContainerLow,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.inputPad,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + 2,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
   },
   searchPlaceholder: {
     flex: 1,
-    ...typography.body,
+    fontFamily: PJS.regular,
+    fontSize: 14,
     color: colors.gray400,
-  },
-  radiusPill: {
-    backgroundColor: colors.primary,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  radiusPillText: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '700' as const,
-    color: colors.white,
   },
 
   // ─── 동네 배너 ──────────────────────────────────────────────────────
@@ -608,7 +589,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.primaryLight,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
   locationBannerText: {
@@ -625,32 +606,172 @@ const styles = StyleSheet.create({
 
   // ─── 리스트 ─────────────────────────────────────────────────────────
   listContent: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingTop: spacing.sm,
+  },
+  cardWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 10,
   },
   footerLoader: {
     paddingVertical: spacing.xl,
+  },
+
+  // ─── 히어로 그라디언트 ──────────────────────────────────────────────
+  heroWrap: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: colors.shadowBase,
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  heroPressed: {
+    opacity: 0.94,
+  },
+  heroCard: {
+    padding: 22,
+    paddingBottom: 24,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  heroDecorBig: {
+    position: 'absolute',
+    right: -30,
+    top: -30,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: colors.flyerCircleOverlay,
+  },
+  heroDecorSm: {
+    position: 'absolute',
+    right: 30,
+    bottom: -20,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: colors.flyerCircleOverlayFaint,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroTagBadge: {
+    backgroundColor: colors.onGradientChip,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  heroTagBadgeText: {
+    fontFamily: PJS.extraBold,
+    fontSize: 10,
+    color: colors.white,
+    letterSpacing: 1.5,
+  },
+  heroTime: {
+    fontFamily: PJS.regular,
+    fontSize: 10,
+    color: colors.onGradientTextMuted,
+  },
+  heroProductName: {
+    fontFamily: PJS.extraBold,
+    fontSize: 20,
+    color: colors.white,
+    letterSpacing: -0.4,
+    marginTop: 12,
+  },
+  heroStoreName: {
+    fontFamily: PJS.regular,
+    fontSize: 11,
+    color: colors.bannerTextMuted,
+    marginTop: 2,
+  },
+  heroPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 14,
+    gap: 8,
+  },
+  heroPrice: {
+    fontFamily: PJS.extraBold,
+    fontSize: 42,
+    color: colors.white,
+    letterSpacing: -1.5,
+    lineHeight: 44,
+  },
+  heroPriceUnit: {
+    fontFamily: PJS.bold,
+    fontSize: 16,
+    color: colors.onGradientTextStrong,
+  },
+  heroSavingsPill: {
+    marginLeft: 'auto',
+    backgroundColor: colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: spacing.radiusFull,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  heroSavingsText: {
+    fontFamily: PJS.extraBold,
+    fontSize: 11,
+  },
+  heroBarTrack: {
+    marginTop: 14,
+    height: 5,
+    backgroundColor: colors.onGradientChip,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  heroBarFill: {
+    height: '100%',
+    backgroundColor: colors.white,
+    borderRadius: 3,
+  },
+  heroBarLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  heroBarLabel: {
+    fontFamily: PJS.bold,
+    fontSize: 10,
+    color: colors.onGradientTextBase,
   },
 
   // ─── 인기 태그 ──────────────────────────────────────────────────────
   tagsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
   tagChip: {
-    backgroundColor: colors.surfaceContainerLowest,
+    backgroundColor: colors.white,
     borderRadius: spacing.radiusFull,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderWidth: spacing.borderThin,
-    borderColor: colors.gray200,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
+  tagChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tagText: {
-    fontSize: typography.tagText.fontSize,
-    fontWeight: '600' as const,
-    color: colors.gray600,
+    fontFamily: PJS.semiBold,
+    fontSize: 13,
+    color: colors.gray700,
+  },
+  tagTextActive: {
+    color: colors.white,
   },
 
   // ─── 섹션 헤더 ──────────────────────────────────────────────────────
@@ -659,364 +780,81 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
     marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: typography.body.fontSize,
-    fontWeight: '800' as const,
+    fontFamily: PJS.extraBold,
+    fontSize: 18,
     color: colors.black,
     letterSpacing: -0.3,
+  },
+  sectionSub: {
+    fontFamily: PJS.regular,
+    fontSize: 12,
+    color: colors.gray600,
+    marginTop: 2,
+  },
+  sectionMoreBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+    backgroundColor: colors.white,
   },
   sectionMoreText: {
-    fontSize: typography.labelSm.fontSize,
-    fontWeight: '700' as const,
-    color: colors.primary,
-  },
-
-  // ─── 히어로 카드 ────────────────────────────────────────────────────
-  heroCard: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    borderRadius: spacing.radiusXl,
-    padding: spacing.md,
-    backgroundColor: colors.surfaceContainerLowest,
-    shadowColor: colors.shadowBase,
-    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
-    shadowOpacity: 0.08,
-    shadowRadius: spacing.shadowRadiusXl,
-    elevation: 4,
-  },
-  heroCardPressed: {
-    opacity: 0.96,
-    transform: [{ scale: 0.99 }],
-  },
-  heroInnerCard: {
-    borderRadius: spacing.radiusLg,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-    shadowColor: colors.shadowBase,
-    shadowOffset: { width: 0, height: spacing.shadowOffsetY },
-    shadowOpacity: 0.06,
-    shadowRadius: spacing.shadowRadiusSm,
-    elevation: 2,
-  },
-  heroImageWrap: {
-    overflow: 'hidden',
-    aspectRatio: 16 / 9,
-    backgroundColor: colors.surfaceContainerLow,
-  },
-  heroGradientOverlay: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  heroGradientProductName: {
-    ...typography.headingMd,
-    color: colors.white,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  heroGradientPrice: {
-    ...typography.price,
-    color: colors.white,
-  },
-  heroClosingBadge: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
-    backgroundColor: colors.danger,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  heroClosingBadgeText: {
-    fontSize: typography.tabLabel.fontSize,
-    fontWeight: '700' as const,
-    color: colors.white,
-  },
-  heroBody: {
-    padding: spacing.md,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  heroLeft: {
-    flex: 1,
-  },
-  heroProductName: {
-    fontFamily: PJS.extraBold,
-    fontSize: typography.headingMd.fontSize,
-    color: colors.black,
-    letterSpacing: -0.3,
-    lineHeight: 22,
-    marginBottom: spacing.xs,
-  },
-  heroStoreName: {
-    fontSize: typography.bodySm.fontSize,
-    fontWeight: '600' as const,
-    color: colors.primary,
-    marginBottom: spacing.micro,
-  },
-  heroTime: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '400' as const,
-    color: colors.outlineColor,
-  },
-  heroRight: {
-    alignItems: 'flex-end',
-    flexShrink: 0,
-    maxWidth: '45%',
-  },
-  heroPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.micro,
-  },
-  heroPrice: {
-    ...typography.priceCard,
-  },
-  heroPriceUnit: {
     fontFamily: PJS.bold,
-    fontSize: typography.bodySm.fontSize,
-    color: colors.onSurfaceVariant,
-    marginBottom: spacing.xs,
-  },
-  heroLowestLabel: {
-    fontSize: typography.microLabel.fontSize,
-    fontWeight: '900' as const,
-    color: colors.danger,
-    letterSpacing: -0.2,
-    marginTop: spacing.xs,
-  },
-  // 히어로 커뮤니티 정보
-  heroCommunityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  heroVerifiedChip: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.micro,
-  },
-  heroVerifiedChipText: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '700' as const,
+    fontSize: 12,
     color: colors.primary,
-  },
-  heroRegistrantText: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '500' as const,
-    color: colors.gray600,
   },
 
   // ─── 전단지 배너 ────────────────────────────────────────────────────
   flyerBanner: {
     marginHorizontal: spacing.lg,
+    marginTop: spacing.xl,
     marginBottom: spacing.md,
-    borderRadius: spacing.radiusLg,
-    overflow: 'hidden',
+    borderRadius: 16,
+    padding: 18,
     backgroundColor: colors.flyerBannerBg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  flashBadgeWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    gap: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  flashBadge: {
-    backgroundColor: colors.tertiaryFixedDim,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+  flyerDot: {
+    position: 'absolute',
+    right: -30,
+    bottom: -40,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: colors.flyerPrimaryDotOverlay,
   },
   flashBadgeText: {
-    fontSize: typography.tabLabel.fontSize,
-    fontWeight: '900' as const,
-    color: colors.onTertiary,
+    fontFamily: PJS.extraBold,
+    fontSize: 10,
+    color: colors.tertiaryFixedDim,
     letterSpacing: 2,
-    textTransform: 'uppercase' as const,
+    marginBottom: 4,
   },
   flyerBannerTitle: {
-    fontSize: typography.price.fontSize,
-    fontWeight: '900' as const,
+    fontFamily: PJS.extraBold,
+    fontSize: 18,
     color: colors.white,
-    textAlign: 'center' as const,
-    letterSpacing: -0.5,
-    lineHeight: 30,
+    letterSpacing: -0.4,
   },
   flyerBannerSub: {
-    fontSize: typography.labelSm.fontSize,
-    fontWeight: '500' as const,
-    color: colors.flyerSubtitleTextDim,
-    textAlign: 'center' as const,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xl,
+    fontFamily: PJS.regular,
+    fontSize: 12,
+    color: colors.onGradientTextSubtle,
+    marginTop: 3,
   },
-  flyerFanWrap: {
-    height: spacing.flyerFanWrapH,
-    position: 'relative',
-  },
-  flyerFanCard: {
-    position: 'absolute',
-    width: '40%',
-    aspectRatio: 4 / 3,
-    borderRadius: spacing.radiusMd,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.shadowBase,
-    shadowOffset: { width: 0, height: spacing.flyerFanShadowOffsetY },
-    shadowOpacity: spacing.flyerFanShadowOpacity,
-    shadowRadius: spacing.flyerFanShadowRadius,
-    elevation: spacing.flyerFanElevation,
-  },
-  flyerFanLeft: {
-    left: '4%',
-    top: '15%',
-    backgroundColor: colors.flyerFanBgLeft,
-    transform: [{ rotate: '-13deg' }],
-    zIndex: 1,
-  },
-  flyerFanCenter: {
-    left: '28%',
-    top: '2%',
-    backgroundColor: colors.flyerFanBgCenter,
-    transform: [{ rotate: '-1deg' }],
-    zIndex: 3,
-    width: '44%',
-  },
-  flyerFanRight: {
-    right: '4%',
-    top: '15%',
-    backgroundColor: colors.flyerFanBgRight,
-    transform: [{ rotate: '11deg' }],
-    zIndex: 2,
-  },
-  flyerFanEmoji: {
-    fontSize: spacing.emojiMd,
-  },
-
-  // ─── 피드 카드 (단일 컬럼) ──────────────────────────────────────────
-  feedCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: spacing.radiusLg,
-    padding: spacing.md,
-    shadowColor: colors.shadowBase,
-    shadowOffset: { width: 0, height: spacing.shadowOffsetY },
-    shadowOpacity: 0.06,
-    shadowRadius: spacing.shadowRadiusMd,
-    elevation: 2,
-    borderWidth: spacing.borderThin,
-    borderColor: colors.outlineVariant,
-  },
-  feedCardPressed: {
-    opacity: 0.97,
-    transform: [{ scale: 0.99 }],
-  },
-  feedImgWrap: {
-    width: spacing.feedCardImageSize,
-    height: spacing.feedCardImageSize,
-    borderRadius: spacing.radiusMd,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceContainer,
-    flexShrink: 0,
-  },
-  feedImgPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceContainerLow,
-  },
-  feedDiscountBadge: {
-    position: 'absolute',
-    top: spacing.xs,
-    left: spacing.xs,
-    backgroundColor: colors.danger,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.micro,
-  },
-  feedDiscountBadgeText: {
-    fontSize: typography.microLabel.fontSize,
-    fontWeight: '900' as const,
+  flyerChev: {
+    fontSize: 24,
     color: colors.white,
-  },
-  feedBody: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  feedProductName: {
-    fontSize: typography.labelMd.fontSize,
-    fontWeight: '700' as const,
-    color: colors.black,
-    lineHeight: 20,
-    marginBottom: spacing.micro,
-  },
-  feedPrice: {
-    fontSize: typography.headingBase.fontSize,
-    fontWeight: '900' as const,
-    color: colors.primary,
-    letterSpacing: -0.5,
-    marginBottom: spacing.xs,
-  },
-  feedStoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.micro,
-    marginBottom: spacing.xs,
-  },
-  feedStoreName: {
-    fontSize: typography.labelSm.fontSize,
-    fontWeight: '500' as const,
-    color: colors.gray600,
-    flex: 1,
-  },
-  feedVerifiedChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primaryLight,
-    borderRadius: spacing.radiusFull,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.micro,
-    marginBottom: spacing.micro,
-  },
-  feedVerifiedText: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '700' as const,
-    color: colors.primary,
-  },
-  feedRegistrantText: {
-    fontSize: typography.caption.fontSize,
-    fontWeight: '400' as const,
-    color: colors.gray400,
-  },
-  feedWishBtn: {
-    width: spacing.xxl,
-    height: spacing.xxl,
-    borderRadius: spacing.radiusFull,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginLeft: spacing.sm,
-  },
-  feedWishBtnText: {
-    fontSize: typography.headingMd.fontSize,
-    fontWeight: '700' as const,
-    color: colors.white,
-    lineHeight: 20,
+    fontFamily: PJS.bold,
   },
 });
 
