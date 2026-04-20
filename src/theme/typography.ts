@@ -163,4 +163,12 @@ export const typography = {
     fontFamily: PJS.regular,
     fontSize: 12,
   },
+  // PriceCard 우측 가격 숫자 (22pt ExtraBold) — 목록 카드 전용
+  priceCardValue: {
+    fontFamily: PJS.extraBold,
+    fontSize: 22,
+    color: colors.onBackground,
+    letterSpacing: -0.6,
+    lineHeight: 24,
+  },
 } as const;

@@ -7,8 +7,8 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { colors } from '../../theme';
-import { PJS } from '../../theme/typography';
+import { colors, spacing } from '../../theme';
+import { PJS, typography } from '../../theme/typography';
 import { formatPrice, formatRelativeTime } from '../../utils/format';
 import type { ProductPriceCard } from '../../types/api.types';
 import { PriceTag } from './PriceTag';
@@ -133,14 +133,14 @@ export const PriceCard = React.memo(PriceCardBase);
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: spacing.radiusLg,
+    paddingVertical: spacing.inputPad,
+    paddingHorizontal: spacing.inputPad,
     shadowColor: colors.shadowBase,
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowOpacity: spacing.ambientShadowOpacity,
+    shadowRadius: spacing.shadowRadiusMd,
+    shadowOffset: { width: 0, height: spacing.xs },
+    elevation: spacing.elevationXs,
   },
   cardPressed: {
     opacity: 0.88,
@@ -148,12 +148,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    columnGap: 12,
+    columnGap: spacing.md,
   },
   image: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
+    width: spacing.priceCardImageSize,
+    height: spacing.priceCardImageSize,
+    borderRadius: spacing.md,
     backgroundColor: colors.surfaceContainerLow,
   },
   imagePlaceholder: {
@@ -161,8 +161,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imagePlaceholderText: {
-    fontFamily: PJS.bold,
-    fontSize: 22,
+    ...typography.headingXl,
     color: colors.gray400,
   },
   body: {
@@ -172,91 +171,82 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    columnGap: 6,
+    columnGap: spacing.cardTextGap,
     flexWrap: 'wrap',
   },
   productName: {
+    ...typography.bodyMd,
     fontFamily: PJS.bold,
-    fontSize: 15,
-    color: colors.onBackground,
     letterSpacing: -0.2,
     flexShrink: 1,
   },
   meta: {
-    fontFamily: PJS.regular,
-    fontSize: 12,
+    ...typography.labelSm,
     color: colors.gray600,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   contributor: {
+    ...typography.caption,
     fontFamily: PJS.medium,
-    fontSize: 11,
-    color: colors.gray400,
-    marginTop: 6,
+    marginTop: spacing.cardTextGap,
   },
   priceCol: {
     alignItems: 'flex-end',
-    minWidth: 92,
+    minWidth: spacing.priceColMinWidth,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    columnGap: 1,
+    columnGap: spacing.priceUnitGap,
   },
   priceNumber: {
-    fontFamily: PJS.extraBold,
-    fontSize: 22,
-    color: colors.onBackground,
-    letterSpacing: -0.6,
-    lineHeight: 24,
+    ...typography.priceCardValue,
   },
   priceWon: {
+    ...typography.labelSm,
     fontFamily: PJS.bold,
-    fontSize: 12,
     color: colors.onBackground,
   },
   original: {
-    fontFamily: PJS.regular,
-    fontSize: 11,
+    ...typography.caption,
     color: colors.cardPriceStrike,
-    marginTop: 4,
+    marginTop: spacing.xs,
     textDecorationLine: 'line-through',
   },
   compareChip: {
     alignSelf: 'flex-end',
-    marginTop: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
+    marginTop: spacing.cardTextGap,
+    paddingHorizontal: spacing.chipPadH,
+    paddingVertical: spacing.chipPadV,
+    borderRadius: spacing.radiusSm,
     backgroundColor: colors.primaryLight,
   },
   compareChipText: {
+    ...typography.tabLabel,
     fontFamily: PJS.extraBold,
-    fontSize: 10,
     color: colors.primaryDark,
   },
   barWrap: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   barTrack: {
-    height: 4,
-    borderRadius: 2,
+    height: spacing.xs,
+    borderRadius: spacing.micro,
     backgroundColor: colors.surfaceContainerHigh,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 2,
+    borderRadius: spacing.micro,
   },
   barLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   barLabel: {
-    fontFamily: PJS.medium,
-    fontSize: 10,
+    ...typography.tabLabel,
     color: colors.gray400,
   },
 });

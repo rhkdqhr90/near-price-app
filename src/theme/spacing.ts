@@ -197,4 +197,22 @@ export const spacing = {
   elevationSm: 4,   // 칩 / 소형 카드
   elevationMd: 6,   // 검색 컨테이너 / 중형 카드
   elevationLg: 8,   // 패널 / 대형 카드
+
+  // PriceCard 전용
+  priceCardImageSize: 64,  // 상품 썸네일 크기
+  priceColMinWidth: 92,    // 우측 가격 컬럼 최소 너비
+  priceUnitGap: 1,         // 가격 숫자 ↔ 원 단위 간격
+
+  // Chip 공용 패딩 (radiusPill / compareChip 등 소형 칩)
+  chipPadH: 7,
+  chipPadV: 3,
+
+  // Border Radius 확장
+  radiusXs: 8,      // 소형 배지 (bellBadge 등)
+  radiusInput: 14,  // 검색바 / 입력 필드
+  radiusHero: 22,   // 히어로 카드 (heroWrap)
+
+  // HomeScreen 히어로/검색바 전용
+  heroCardPad: 22,    // 히어로 카드 내부 패딩
+  searchBarGap: 10,   // 검색바 내부 아이콘-텍스트 간격
 } as const;
