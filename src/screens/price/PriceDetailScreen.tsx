@@ -27,10 +27,11 @@ import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
 import ShareIcon from '../../components/icons/ShareIcon';
 import HeartIcon from '../../components/icons/HeartIcon';
 import MapPinIcon from '../../components/icons/MapPinIcon';
+import TagIcon from '../../components/icons/TagIcon';
 import PriceRangeBar from '../../components/price/PriceRangeBar';
 import StoreRankRow, { type StoreRankRowData } from '../../components/price/StoreRankRow';
 import StoreHistorySheet from '../../components/price/StoreHistorySheet';
-import { usePriceDetail, useProductPricesByName } from '../../hooks/queries/usePrices';
+import { usePriceDetail, useProductPrices, useProductPricesByName } from '../../hooks/queries/usePrices';
 import { useVerifyPrice, useMyVerificationByPrice } from '../../hooks/queries/useVerification';
 import { useMyWishlist, useAddWishlist, useRemoveWishlist } from '../../hooks/queries/useWishlist';
 import { useToastStore } from '../../store/toastStore';
@@ -81,7 +82,8 @@ const haversineM = (lat1: number, lng1: number, lat2: number, lng2: number): num
  * 중복 등록은 이력 추가, 달라요 👎 N 수치 병기.
  */
 const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { priceId } = route.params;
+  const { productId: paramProductId, productName: paramProductName, priceId: paramPriceId } =
+    route.params;
   const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState<TabKey>('stores');
@@ -96,16 +98,62 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const myLat = useLocationStore((s) => s.latitude);
   const myLng = useLocationStore((s) => s.longitude);
 
-  const { data: price, isLoading, isError, refetch } = usePriceDetail(priceId);
-  const { data: allPricesData } = useProductPricesByName(price?.product.name ?? '');
-  const { data: myVerification } = useMyVerificationByPrice(priceId);
-  const { mutate: verifyPrice, isPending: isVerifying } = useVerifyPrice(priceId);
+  // 진입 경로별 시드 쿼리:
+  //   (a) priceId 딥링크 → usePriceDetail로 포커스 가격 + productName 시드
+  //   (b) productId-only(알림 'product') → useProductPrices로 productName 시드
+  //   (c) productName 있으면 바로 useProductPricesByName
+  const {
+    data: pinnedPrice,
+    isLoading: isLoadingPinned,
+    isError: isErrorPinned,
+    refetch: refetchPinned,
+  } = usePriceDetail(paramPriceId ?? '');
+
+  // productId-only 진입 시 seed. productName이 이미 있으면 비활성.
+  const needsProductSeed = !!paramProductId && !paramProductName && !paramPriceId;
+  const {
+    data: productSeedData,
+    isLoading: isLoadingSeed,
+    isError: isErrorSeed,
+    refetch: refetchSeed,
+  } = useProductPrices(needsProductSeed ? paramProductId : '', 1, 1);
+
+  const resolvedProductName = useMemo(
+    () =>
+      paramProductName ||
+      pinnedPrice?.product.name ||
+      productSeedData?.data?.[0]?.product.name ||
+      '',
+    [paramProductName, pinnedPrice?.product.name, productSeedData?.data],
+  );
+
+  const {
+    data: allPricesData,
+    isLoading: isLoadingList,
+    isError: isErrorList,
+    refetch: refetchList,
+  } = useProductPricesByName(resolvedProductName);
   const { data: wishlist } = useMyWishlist();
   const { mutate: addWishlist } = useAddWishlist();
   const { mutate: removeWishlist } = useRemoveWishlist();
 
   // ─── 파생 값 ────────────────────────────────────────────────────────────────
   const allPrices = useMemo(() => allPricesData ?? [], [allPricesData]);
+
+  // 활성화된 쿼리의 loading/error만 반영 — 비활성 쿼리의 false는 무시.
+  const isLoading =
+    (paramPriceId ? isLoadingPinned : false) ||
+    (needsProductSeed ? isLoadingSeed : false) ||
+    (resolvedProductName.length > 0 ? isLoadingList : false);
+  const isError =
+    (paramPriceId ? isErrorPinned : false) ||
+    (needsProductSeed ? isErrorSeed : false) ||
+    (resolvedProductName.length > 0 ? isErrorList : false);
+  const refetch = useCallback(() => {
+    if (paramPriceId) void refetchPinned();
+    if (needsProductSeed) void refetchSeed();
+    void refetchList();
+  }, [paramPriceId, needsProductSeed, refetchPinned, refetchSeed, refetchList]);
 
   /**
    * 마트별 대표가 (SCREENS.md §0-1):
@@ -133,13 +181,21 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     return reps;
   }, [allPrices]);
 
-  const lowPrice = storeRepresentatives[0]?.price ?? price?.price ?? 0;
-  const highPrice = storeRepresentatives[storeRepresentatives.length - 1]?.price ?? price?.price ?? 0;
+  // 포커스 가격: priceId 딥링크 시 해당 가격, 아니면 최저가 대표.
+  const focusedPrice: PriceResponse | null = pinnedPrice ?? storeRepresentatives[0] ?? null;
+  const focusedPriceId = focusedPrice?.id ?? '';
+
+  const { data: myVerification } = useMyVerificationByPrice(focusedPriceId);
+  const { mutate: verifyPrice, isPending: isVerifying } = useVerifyPrice(focusedPriceId);
+
+  const lowPrice = storeRepresentatives[0]?.price ?? focusedPrice?.price ?? 0;
+  const highPrice =
+    storeRepresentatives[storeRepresentatives.length - 1]?.price ?? focusedPrice?.price ?? 0;
   const avgPrice = useMemo(() => {
-    if (storeRepresentatives.length === 0) return price?.price ?? 0;
+    if (storeRepresentatives.length === 0) return focusedPrice?.price ?? 0;
     const sum = storeRepresentatives.reduce((s, r) => s + r.price, 0);
     return Math.round(sum / storeRepresentatives.length);
-  }, [storeRepresentatives, price?.price]);
+  }, [storeRepresentatives, focusedPrice?.price]);
 
   const savingsPct = useMemo(() => {
     if (!highPrice || highPrice === lowPrice) return 0;
@@ -148,7 +204,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // 추이 placeholder: 최신 2건 비교 (백엔드 trend 미제공)
   const trendPct = useMemo<number | null>(() => {
-    const thisStore = allPrices.filter((p) => p.store.id === price?.store.id);
+    const thisStore = allPrices.filter((p) => p.store.id === focusedPrice?.store.id);
     if (thisStore.length < 2) return null;
     const sorted = [...thisStore].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -157,7 +213,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const prev = sorted[1].price;
     if (prev === 0) return null;
     return Math.round(((latest - prev) / prev) * 100);
-  }, [allPrices, price?.store.id]);
+  }, [allPrices, focusedPrice?.store.id]);
 
   const rankRows = useMemo<StoreRankRowData[]>(() => {
     return storeRepresentatives.map((rep, idx) => {
@@ -181,42 +237,45 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [storeRepresentatives, myLat, myLng, currentUserId]);
 
   const currentStoreRepIndex = useMemo(
-    () => storeRepresentatives.findIndex((r) => r.store.id === price?.store.id),
-    [storeRepresentatives, price?.store.id],
+    () => storeRepresentatives.findIndex((r) => r.store.id === focusedPrice?.store.id),
+    [storeRepresentatives, focusedPrice?.store.id],
   );
   const currentRank = currentStoreRepIndex >= 0 ? currentStoreRepIndex + 1 : null;
   const compareCount = storeRepresentatives.length;
 
-  const isWishlisted = useMemo(() => {
-    if (!wishlist || !price) return false;
-    return wishlist.items.some((i) => i.productId === price.product.id);
-  }, [wishlist, price]);
+  // 찜은 "상품" 단위이므로 paramProductId 우선, 없으면 focusedPrice에서 파생.
+  const productIdForActions = paramProductId || focusedPrice?.product.id || '';
 
-  const isOwnPrice = !!currentUserId && price?.user?.id === currentUserId;
+  const isWishlisted = useMemo(() => {
+    if (!wishlist || !productIdForActions) return false;
+    return wishlist.items.some((i) => i.productId === productIdForActions);
+  }, [wishlist, productIdForActions]);
+
+  const isOwnPrice = !!currentUserId && focusedPrice?.user?.id === currentUserId;
   const hasVerified = !!myVerification;
 
   // ─── 핸들러 ──────────────────────────────────────────────────────────────────
   const handleToggleWish = useCallback(() => {
-    if (!price || !currentUserId) {
+    if (!productIdForActions || !currentUserId) {
       showToast('로그인이 필요해요', 'error');
       return;
     }
     if (isWishlisted) {
-      removeWishlist(price.product.id);
+      removeWishlist(productIdForActions);
     } else {
-      addWishlist(price.product.id);
+      addWishlist(productIdForActions);
     }
-  }, [price, currentUserId, isWishlisted, addWishlist, removeWishlist, showToast]);
+  }, [productIdForActions, currentUserId, isWishlisted, addWishlist, removeWishlist, showToast]);
 
   const handleShare = useCallback(async () => {
-    if (!price) return;
+    if (!focusedPrice) return;
     try {
-      const message = `[마실] ${price.product.name} ${formatPrice(price.price)} - ${price.store.name}\n${price.store.address}\n내 동네 최저가를 찾아보세요!`;
+      const message = `[마실] ${focusedPrice.product.name} ${formatPrice(focusedPrice.price)} - ${focusedPrice.store.name}\n${focusedPrice.store.address}\n내 동네 최저가를 찾아보세요!`;
       await Share.share({ message });
     } catch {
       showToast('공유할 수 없어요', 'error');
     }
-  }, [price, showToast]);
+  }, [focusedPrice, showToast]);
 
   const handleRegisterNew = useCallback(() => {
     navigation.getParent()?.navigate('PriceRegisterStack' as never);
@@ -311,7 +370,11 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  if (isError || !price) {
+  if (isError || !focusedPrice) {
+    // 에러 vs 정상 빈 상태 구분:
+    //   - isError: 네트워크/서버 에러 → 재시도
+    //   - !isError && !focusedPrice: 해당 상품에 등록된 가격이 0건 → 제보 유도
+    const isEmptyProduct = !isError && !focusedPrice;
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.headerLoading}>
@@ -324,18 +387,27 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <ChevronLeftIcon size={spacing.iconLg} color={colors.onBackground} />
           </TouchableOpacity>
         </View>
-        <EmptyState
-          icon={WifiOffIcon}
-          title="정보를 불러올 수 없어요"
-          subtitle="네트워크 상태를 확인하고 다시 시도해 주세요."
-          action={{ label: '다시 시도', onPress: refetch }}
-        />
+        {isEmptyProduct ? (
+          <EmptyState
+            icon={TagIcon}
+            title="아직 등록된 가격이 없어요"
+            subtitle={`${paramProductName || '이 상품'}의 첫 제보자가 되어 주세요.`}
+            action={{ label: '가격 제보하기', onPress: handleRegisterNew }}
+          />
+        ) : (
+          <EmptyState
+            icon={WifiOffIcon}
+            title="정보를 불러올 수 없어요"
+            subtitle="네트워크 상태를 확인하고 다시 시도해 주세요."
+            action={{ label: '다시 시도', onPress: refetch }}
+          />
+        )}
       </SafeAreaView>
     );
   }
 
-  const productName = price.product.name;
-  const categoryLabel = CATEGORY_LABELS[price.product.category] ?? '기타';
+  const productName = focusedPrice.product.name;
+  const categoryLabel = CATEGORY_LABELS[focusedPrice.product.category] ?? '기타';
   const heroPrice = lowPrice.toLocaleString('ko-KR');
 
   return (
@@ -524,8 +596,8 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.tabContent}>
             <View style={styles.infoCard}>
               <InfoRow label="카테고리" value={categoryLabel} />
-              <InfoRow label="최근 업데이트" value={formatRelativeTime(price.createdAt)} />
-              <InfoRow label="첫 등록자" value={price.user?.nickname ?? '익명'} />
+              <InfoRow label="최근 업데이트" value={formatRelativeTime(focusedPrice.createdAt)} />
+              <InfoRow label="첫 등록자" value={focusedPrice.user?.nickname ?? '익명'} />
               <InfoRow label="누적 제보" value={`${allPrices.length}건`} />
             </View>
 
@@ -541,7 +613,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   accessibilityLabel="가격이 맞아요"
                 >
                   <Text style={styles.confirmBtnText}>
-                    맞아요 ✓ {price.confirmedCount}
+                    맞아요 ✓ {focusedPrice.confirmedCount}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -553,7 +625,7 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   accessibilityLabel="가격이 달라요"
                 >
                   <Text style={styles.disputeBtnText}>
-                    달라요 ✗ {price.disputedCount}
+                    달라요 ✗ {focusedPrice.disputedCount}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -686,7 +758,7 @@ const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) =
 );
 
 const HERO_H = 160;
-const MAP_BTN_SIZE = 52;
+const MAP_BTN_SIZE = 44;
 
 const styles = StyleSheet.create({
   container: {
@@ -1024,8 +1096,10 @@ const styles = StyleSheet.create({
     elevation: spacing.elevationMd,
   },
   ctaPrimaryText: {
-    ...typography.labelMd,
+    fontFamily: PJS.bold,
+    fontSize: 13,
     color: colors.white,
+    letterSpacing: -0.2,
   },
 
   // ─── Modal (기존 이식) ─────────────────────────────────────────────────────

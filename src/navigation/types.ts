@@ -49,15 +49,15 @@ export type MyPageStackParamList = {
 export type HomeStackParamList = {
   Home: undefined;
   Search: { initialQuery?: string };
-  PriceCompare: { productId: string; productName: string };
-  PriceDetail: { priceId: string };
+  // 상품 상세: 기본 진입은 productId+productName. 알림 딥링크 등 특정 가격 포커스 시 priceId.
+  PriceDetail: { productId: string; productName: string; priceId?: string };
   StoreDetail: { storeId: string };
   StoreInfo: { storeId: string };
   Notifications: undefined;
 };
 
 // ─── Price Register Stack ──────────────────────────────────────────────────
-// Flow: StoreSelect → InputMethod → (Camera → OcrResult | -) → ItemDetail → Confirm
+// Flow: StoreSelect → InputMethod → (Camera → OcrResult | -) → ItemDetail → Confirm → Done
 
 export type PriceRegisterStackParamList = {
   StoreSelect: undefined;
@@ -93,6 +93,12 @@ export type PriceRegisterStackParamList = {
     initialCardConditionNote?: string;
   };
   Confirm: undefined;
+  Done: {
+    itemCount: number;
+    storeName?: string;
+    firstItemName?: string;
+    firstItemPrice?: number;
+  };
 };
 
 // ─── Onboarding Stack ──────────────────────────────────────────────────────

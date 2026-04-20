@@ -214,7 +214,7 @@ const SearchScreen: React.FC<Props> = ({ navigation, route }) => {
           style={({ pressed }) => [styles.listCard, pressed && styles.listCardPressed]}
           onPress={() => {
             void saveRecentSearch(item.productName);
-            navigation.navigate('PriceCompare', {
+            navigation.navigate('PriceDetail', {
               productId: item.productId,
               productName: item.productName,
             });

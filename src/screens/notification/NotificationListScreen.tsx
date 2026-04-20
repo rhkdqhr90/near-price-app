@@ -69,15 +69,19 @@ const NotificationListScreen: React.FC<Props> = ({ navigation }) => {
       // Deep link 라우팅 — linkType별 화면 분기
       switch (notif.linkType) {
         case 'price':
+          // priceId만 아는 상태 — 화면에서 priceId로 조회 후 product 정보 파생.
           if (notif.linkId) {
-            navigation.navigate('PriceDetail', { priceId: notif.linkId });
+            navigation.navigate('PriceDetail', {
+              productId: '',
+              productName: '',
+              priceId: notif.linkId,
+            });
           }
           break;
         case 'product':
-          // product 화면은 직접 라우트가 없어 PriceCompare로 이동.
           // productName은 알림 제목과 의미가 다르므로 빈 문자열 — 화면에서 조회 후 표시.
           if (notif.linkId) {
-            navigation.navigate('PriceCompare', {
+            navigation.navigate('PriceDetail', {
               productId: notif.linkId,
               productName: '',
             });

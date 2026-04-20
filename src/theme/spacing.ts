@@ -112,7 +112,7 @@ export const spacing = {
   priceDetailVerifyAvatarSize: 48, // 인증 현황 아바타 크기
   badgePadH: 10,                   // 배지 수평 패딩 (sm+micro = 8+2)
 
-  // 매장 썸네일 크기 (PriceCompareScreen 1위 카드)
+  // 매장 썸네일 크기
   storeThumbSize: 80,
 
   // 그림자 오프셋 Y

@@ -32,10 +32,10 @@ const MyPriceListScreen: React.FC<Props> = ({ navigation }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  const handleNavigatePriceCompare = useCallback(
+  const handleNavigatePriceDetail = useCallback(
     (productId: string, productName: string) => {
       navigation.getParent()?.navigate('HomeStack', {
-        screen: 'PriceCompare',
+        screen: 'PriceDetail',
         params: { productId, productName },
       });
     },
@@ -104,7 +104,7 @@ const MyPriceListScreen: React.FC<Props> = ({ navigation }) => {
       >
         <TouchableOpacity
           style={styles.card}
-          onPress={() => handleNavigatePriceCompare(item.product.id, item.product.name)}
+          onPress={() => handleNavigatePriceDetail(item.product.id, item.product.name)}
           onLongPress={() => handleDelete(item)}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -126,7 +126,7 @@ const MyPriceListScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </Swipeable>
     ),
-    [handleNavigatePriceCompare, handleDelete, renderDeleteAction],
+    [handleNavigatePriceDetail, handleDelete, renderDeleteAction],
   );
 
   const contentStyle = useMemo(

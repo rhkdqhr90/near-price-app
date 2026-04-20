@@ -17,7 +17,6 @@ import { spacing } from '../theme/spacing';
 import { typography, PJS } from '../theme/typography';
 import HomeScreen from '../screens/home/HomeScreen';
 import SearchScreen from '../screens/home/SearchScreen';
-import PriceCompareScreen from '../screens/price/PriceCompareScreen';
 import PriceDetailScreen from '../screens/price/PriceDetailScreen';
 import StoreDetailScreen from '../screens/price/StoreDetailScreen';
 import StoreInfoScreen from '../screens/price/StoreInfoScreen';
@@ -29,6 +28,7 @@ import CameraScreen from '../screens/price/CameraScreen';
 import OcrResultScreen from '../screens/price/OcrResultScreen';
 import ItemDetailScreen from '../screens/price/ItemDetailScreen';
 import ConfirmScreen from '../screens/price/ConfirmScreen';
+import RegisterDoneScreen from '../screens/price/RegisterDoneScreen';
 import FlyerScreen from '../screens/flyer/FlyerScreen';
 import FlyerDetailScreen from '../screens/flyer/FlyerDetailScreen';
 import WishlistScreen from '../screens/wishlist/WishlistScreen';
@@ -69,17 +69,9 @@ const HomeStackNavigator: React.FC = () => (
       options={{ headerShown: false }}
     />
     <HomeStack.Screen
-      name="PriceCompare"
-      component={PriceCompareScreen}
-      options={{ headerShown: false }}
-    />
-    <HomeStack.Screen
       name="PriceDetail"
       component={PriceDetailScreen}
-      options={{
-        headerShown: false,
-        animation: 'slide_from_bottom',
-      }}
+      options={{ headerShown: false }}
     />
     <HomeStack.Screen
       name="StoreDetail"
@@ -135,6 +127,11 @@ const PriceRegisterStackNavigator: React.FC = () => (
       name="Confirm"
       component={ConfirmScreen}
       options={{ title: '등록 확인' }}
+    />
+    <PriceRegisterStack.Screen
+      name="Done"
+      component={RegisterDoneScreen}
+      options={{ headerShown: false }}
     />
   </PriceRegisterStack.Navigator>
 );

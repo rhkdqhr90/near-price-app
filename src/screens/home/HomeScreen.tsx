@@ -75,12 +75,38 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const recentPrices = useMemo(() => {
     const all = recentData?.pages.flatMap((p) => p.data) ?? [];
-    const seen = new Set<string>();
-    return all.filter((p) => {
-      if (seen.has(p.productId)) return false;
-      seen.add(p.productId);
-      return true;
-    });
+    const byName = new Map<string, ProductPriceCard>();
+
+    for (const item of all) {
+      if (!item.productName || typeof item.productName !== 'string') {
+        continue;
+      }
+
+      const key = `${item.productName.trim().toLowerCase()}::${item.unitType ?? 'other'}`;
+      const current = byName.get(key);
+
+      if (!current) {
+        byName.set(key, item);
+        continue;
+      }
+
+      if (item.minPrice < current.minPrice) {
+        byName.set(key, item);
+        continue;
+      }
+
+      if (item.minPrice === current.minPrice) {
+        const currentTs = new Date(current.createdAt).getTime();
+        const itemTs = new Date(item.createdAt).getTime();
+        if (itemTs > currentTs) {
+          byName.set(key, item);
+        }
+      }
+    }
+
+    return Array.from(byName.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [recentData]);
 
   const nearbyPrices = useMemo(() => {
@@ -114,7 +140,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     (productId: string) => {
       const card = nearbyPrices.find((p) => p.productId === productId);
       if (!card) return;
-      navigation.navigate('PriceCompare', {
+      navigation.navigate('PriceDetail', {
         productId: card.productId,
         productName: card.productName,
       });

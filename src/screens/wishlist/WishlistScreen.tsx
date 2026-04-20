@@ -84,7 +84,7 @@ const WishlistScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleItemPress = useCallback((item: WishlistItem) => {
     navigation.navigate('HomeStack', {
-      screen: 'PriceCompare',
+      screen: 'PriceDetail',
       params: { productId: item.productId, productName: item.productName },
     });
   }, [navigation]);
