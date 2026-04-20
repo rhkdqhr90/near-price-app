@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   feedbackContainer: {
-    minHeight: 28,
+    minHeight: spacing.xxl + spacing.xs,
     marginBottom: spacing.lg,
     justifyContent: 'center',
   },

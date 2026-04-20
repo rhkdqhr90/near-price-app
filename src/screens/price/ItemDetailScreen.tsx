@@ -984,12 +984,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.inputPad,
     paddingVertical: spacing.md,
     ...typography.body,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: 'transparent',
   },
   inputError: {
     borderColor: colors.danger,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
   },
   errorText: {
     ...typography.bodySm,
@@ -1003,7 +1003,7 @@ const styles = StyleSheet.create({
   priceTagSubField: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
-    borderTopWidth: 0.5,
+    borderTopWidth: spacing.borderHairline,
     borderTopColor: colors.gray100,
     gap: spacing.sm,
   },
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     marginBottom: spacing.sm,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: spacing.borderHairline,
     borderBottomColor: colors.gray200,
   },
   collapsibleTitle: {
@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
   optionalFieldGroup: {
     gap: spacing.sm,
     paddingTop: spacing.md,
-    borderTopWidth: 0.5,
+    borderTopWidth: spacing.borderHairline,
     borderTopColor: colors.gray100,
   },
   dateSection: { marginTop: spacing.md, gap: spacing.sm },
@@ -1040,7 +1040,7 @@ const styles = StyleSheet.create({
     borderRadius: spacing.radiusMd,
     paddingHorizontal: spacing.inputPad,
     paddingVertical: spacing.md,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: 'transparent',
   },
   datePickerText: {
@@ -1064,7 +1064,7 @@ const styles = StyleSheet.create({
     height: spacing.cameraControlSize + spacing.md + spacing.md + spacing.md,
     backgroundColor: colors.gray100,
     borderRadius: spacing.radiusMd,
-    borderWidth: 1,
+    borderWidth: spacing.borderThin,
     borderColor: colors.gray200,
     borderStyle: 'dashed',
     alignItems: 'center',
@@ -1077,7 +1077,7 @@ const styles = StyleSheet.create({
   suggestions: {
     backgroundColor: colors.white,
     borderRadius: spacing.radiusMd,
-    borderWidth: 0.5,
+    borderWidth: spacing.borderHairline,
     borderColor: colors.gray200,
     marginTop: spacing.xs,
     overflow: 'hidden',

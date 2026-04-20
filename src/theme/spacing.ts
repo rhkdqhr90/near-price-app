@@ -215,4 +215,10 @@ export const spacing = {
   // HomeScreen 히어로/검색바 전용
   heroCardPad: 22,    // 히어로 카드 내부 패딩
   searchBarGap: 10,   // 검색바 내부 아이콘-텍스트 간격
+
+  // 최소 터치 타겟 (iOS HIG / Material A11y 가이드라인 44dp)
+  touchTargetMin: 44,
+
+  // SearchScreen 매장 아이콘 박스 크기
+  searchIconBox: 32,
 } as const;

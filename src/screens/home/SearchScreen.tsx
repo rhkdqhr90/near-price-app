@@ -544,8 +544,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray100,
   },
   storeIconBox: {
-    width: 32,
-    height: 32,
+    width: spacing.searchIconBox,
+    height: spacing.searchIconBox,
     borderRadius: spacing.sm,
     backgroundColor: colors.gray100,
     alignItems: 'center',

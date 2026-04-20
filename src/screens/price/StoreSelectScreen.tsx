@@ -28,7 +28,7 @@ import PendingPlaceSheet from '../../components/price/PendingPlaceSheet';
 import StoreSearchResultsSheet from '../../components/price/StoreSearchResultsSheet';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
+import { typography, PJS } from '../../theme/typography';
 import { DEFAULT_LATITUDE, DEFAULT_LONGITUDE } from '../../utils/constants';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -510,18 +510,18 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     flex: 1,
-    height: 44,
+    height: spacing.touchTargetMin,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: spacing.md,
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowOpacity: spacing.cardShadowOpacity,
+    shadowRadius: spacing.sm,
+    elevation: spacing.elevationSm,
   },
   searchInput: {
     flex: 1,
@@ -531,17 +531,17 @@ const styles = StyleSheet.create({
   },
 
   backFab: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: spacing.touchTargetMin,
+    height: spacing.touchTargetMin,
+    borderRadius: spacing.md,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowOpacity: spacing.cardShadowOpacity,
+    shadowRadius: spacing.sm,
+    elevation: spacing.elevationSm,
   },
 
   // ─── STEP 라벨 (플로팅) ─────────────────────────────────────────────────
@@ -552,30 +552,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.white,
     paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+    paddingVertical: spacing.cardTextGap,
     borderRadius: spacing.radiusFull,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowOpacity: spacing.cardShadowOpacity,
+    shadowRadius: spacing.sm,
+    elevation: spacing.elevationSm - 1,
     zIndex: 30,
   },
   stepBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+    ...typography.tabLabel,
+    fontFamily: PJS.extraBold,
     color: colors.primary,
     letterSpacing: 1.5,
   },
   stepBadgeDivider: {
-    width: 1,
-    height: 10,
+    width: spacing.borderThin,
+    height: spacing.sm + spacing.micro,
     backgroundColor: colors.gray200,
     marginHorizontal: spacing.sm,
   },
   stepBadgeTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    ...typography.labelSm,
+    fontFamily: PJS.bold,
     color: colors.onBackground,
     letterSpacing: -0.2,
   },
