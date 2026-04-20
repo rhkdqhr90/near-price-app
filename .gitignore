@@ -38,6 +38,9 @@ local.properties
 # env (API 키 등 민감 정보)
 .env
 .env.local
+.env.production
+.env.staging
+.env.localtest
 .env.*.local
 
 # Firebase config (API 키 포함 — CI에서 GOOGLE_SERVICES_JSON_BASE64 시크릿으로 복원)

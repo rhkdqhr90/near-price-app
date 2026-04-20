@@ -69,6 +69,7 @@
 
 # react-native-config
 -keep class com.lugg.RNCConfig.** { *; }
+-keep class com.nearpriceapp.BuildConfig { *; }
 
 -dontwarn com.kakao.**
 -dontwarn com.naver.maps.**

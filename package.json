@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "ENVFILE=.env.local react-native run-android --mode localDebug",
+    "android:local": "ENVFILE=.env.local react-native run-android --mode localDebug",
+    "android:local:release": "cd android && ENVFILE=.env.local ./gradlew assembleLocalRelease",
+    "android:prod:release": "cd android && ENVFILE=.env.production ./gradlew bundleProdRelease",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",

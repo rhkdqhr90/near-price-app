@@ -18,6 +18,16 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: "com.google.gms.google-services"
+
+project.ext.envConfigFiles = [
+    localdebug: ".env.local",
+    localrelease: ".env.local",
+    proddebug: ".env.production",
+    prodrelease: ".env.production",
+    debug: ".env.local",
+    release: ".env.production",
+]
+
 apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
 
 def versionCodeProp = rootProject.findProperty("VERSION_CODE")
@@ -99,6 +109,18 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.nearpriceapp"
+
+    flavorDimensions "environment"
+
+    productFlavors {
+        local {
+            dimension "environment"
+        }
+        prod {
+            dimension "environment"
+        }
+    }
+
     defaultConfig {
         applicationId "com.nearpriceapp"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -107,13 +129,17 @@ android {
         versionName versionNameProp != null ? versionNameProp.toString() : "1.0.0"
         // API 키는 .env에서 읽음 (react-native-config dotenv.gradle 경유)
         // Release 빌드에서 필수 키 누락 시 빌드 실패 처리
-        def kakaoKey = project.env.get("KAKAO_APP_KEY") ?: ""
-        def naverMapKey = project.env.get("NAVER_MAP_CLIENT_ID") ?: ""
+        def kakaoKey = (project.env.get("KAKAO_APP_KEY") ?: "").replaceAll('^"|"$', '').trim()
+        def naverMapKey = (project.env.get("NAVER_MAP_CLIENT_ID") ?: "").replaceAll('^"|"$', '').trim()
+        def resolvedKakaoKey = kakaoKey.isEmpty() ? "KAKAO_APP_KEY_NOT_SET" : kakaoKey
+        def resolvedNaverMapKey = naverMapKey.isEmpty() ? "NAVER_MAP_CLIENT_ID_NOT_SET" : naverMapKey
         manifestPlaceholders = [
-            KAKAO_APP_KEY: kakaoKey.isEmpty() ? "KAKAO_APP_KEY_NOT_SET" : kakaoKey,
-            NAVER_MAP_CLIENT_ID: naverMapKey.isEmpty() ? "NAVER_MAP_CLIENT_ID_NOT_SET" : naverMapKey,
-            usesCleartextTraffic: "true"
+            KAKAO_APP_KEY: resolvedKakaoKey,
+            NAVER_MAP_CLIENT_ID: resolvedNaverMapKey
         ]
+        buildConfigField "String", "KAKAO_APP_KEY", "\"${resolvedKakaoKey}\""
+        resValue "string", "kakao_app_key", "\"${resolvedKakaoKey}\""
+        resValue "string", "build_config_package", "com.nearpriceapp"
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
@@ -144,7 +170,6 @@ android {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.release
-            manifestPlaceholders = [usesCleartextTraffic: "false"]
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
@@ -156,13 +181,20 @@ android {
 afterEvaluate {
     tasks.matching { it.name =~ /bundle.*Release|assemble.*Release/ }.configureEach { task ->
         task.doFirst {
-            def kakao = project.env.get("KAKAO_APP_KEY") ?: ""
-            def naver = project.env.get("NAVER_MAP_CLIENT_ID") ?: ""
+            def kakao = (project.env.get("KAKAO_APP_KEY") ?: "").replaceAll('^"|"$', '').trim()
+            def naver = (project.env.get("NAVER_MAP_CLIENT_ID") ?: "").replaceAll('^"|"$', '').trim()
+            def apiBaseUrl = (project.env.get("API_BASE_URL") ?: "").replaceAll('^"|"$', '').trim()
             if (kakao.isEmpty() || kakao == "KAKAO_APP_KEY_NOT_SET") {
                 throw new GradleException("KAKAO_APP_KEY is not set in .env — release build aborted")
             }
             if (naver.isEmpty() || naver == "NAVER_MAP_CLIENT_ID_NOT_SET") {
                 throw new GradleException("NAVER_MAP_CLIENT_ID is not set in .env — release build aborted")
+            }
+            if (apiBaseUrl.isEmpty()) {
+                throw new GradleException("API_BASE_URL is not set in .env — release build aborted")
+            }
+            if (task.name.toLowerCase().contains("prod") && !apiBaseUrl.toLowerCase().startsWith("https://")) {
+                throw new GradleException("Prod release requires HTTPS API_BASE_URL")
             }
         }
     }

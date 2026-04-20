@@ -1,14 +1,15 @@
 import Config from 'react-native-config';
 
-export const NAVER_MAP_CLIENT_ID = Config.NAVER_MAP_CLIENT_ID ?? '';
+const normalizeEnv = (value?: string): string => value?.replace(/^"|"$/g, '').trim() ?? '';
+
+export const NAVER_MAP_CLIENT_ID = normalizeEnv(Config.NAVER_MAP_CLIENT_ID);
 export const NAVER_MAPS_API_BASE = 'https://maps.apigw.ntruss.com';
 
-// 백엔드 Base URL — .env의 API_BASE_URL
-// 에뮬레이터: http://10.0.2.2:3000 / 실기기: http://<LAN_IP>:3000
-export const API_BASE_URL =
-  Config.API_BASE_URL ??
-  (__DEV__ ? 'http://10.0.2.2:3000' : 'https://api.nearprice.kr');
+const resolvedApiBaseUrl = normalizeEnv(Config.API_BASE_URL);
+if (!resolvedApiBaseUrl) {
+  throw new Error('API_BASE_URL is missing for this build variant.');
+}
+export const API_BASE_URL = resolvedApiBaseUrl;
 
 // package.json의 version을 단일 소스로 사용 (gradle versionName과 동기화 필요)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 export const APP_VERSION: string = require('../../package.json').version;

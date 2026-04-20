@@ -24,6 +24,6 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
-    KakaoSdk.init(this, "f25af6b78693a6f92ecd5cf91b9afb34")
+    KakaoSdk.init(this, BuildConfig.KAKAO_APP_KEY)
   }
 }
