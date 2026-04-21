@@ -5,14 +5,23 @@ import { StackActions } from '@react-navigation/native';
 import type { PriceRegisterScreenProps } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { PJS, typography } from '../../theme/typography';
+import { typography } from '../../theme/typography';
 import { formatPrice } from '../../utils/format';
+import CheckIcon from '../../components/icons/CheckIcon';
 
 type Props = PriceRegisterScreenProps<'Done'>;
 
+/**
+ * 레퍼런스: 마실 2/screens-register.jsx `RegisterDone`
+ * - 88×88 primary 원 + 체크마크 SVG
+ * - "등록 완료!" 타이틀
+ * - 서브텍스트: `{상품명} · {가격}` + 감사 문구
+ * - 포인트 pill (+N 포인트)
+ * - 홈으로 Primary 버튼
+ */
 const RegisterDoneScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { itemCount, storeName, firstItemName, firstItemPrice } = route.params;
+  const { itemCount, firstItemName, firstItemPrice } = route.params;
 
   const summaryText = useMemo(() => {
     if (!firstItemName || firstItemPrice == null) {
@@ -33,17 +42,12 @@ const RegisterDoneScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconWrap}>
-          <Text style={styles.iconText}>OK</Text>
+          <CheckIcon size={44} color={colors.onPrimary} />
         </View>
 
         <Text style={styles.title}>등록 완료!</Text>
         <Text style={styles.subtitle}>{summaryText}</Text>
-
-        {storeName ? (
-          <View style={styles.storePill}>
-            <Text style={styles.storePillText}>{storeName}</Text>
-          </View>
-        ) : null}
+        <Text style={styles.thanks}>이웃에게 큰 도움이 될 거예요 🙏</Text>
 
         <View style={styles.pointPill}>
           <Text style={styles.pointPillText}>{`+${points} 포인트`}</Text>
@@ -74,6 +78,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
   iconWrap: {
     width: 88,
@@ -82,49 +87,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    // 레퍼런스: boxShadow '0 10px 30px rgba(0,191,165,0.35)'
     shadowColor: colors.primary,
     shadowOpacity: 0.35,
-    shadowRadius: spacing.shadowRadiusLg,
-    shadowOffset: { width: 0, height: spacing.shadowOffsetYMd },
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 10 },
     elevation: spacing.elevationLg,
-  },
-  iconText: {
-    fontFamily: PJS.extraBold,
-    fontSize: 24,
-    color: colors.onPrimary,
-    letterSpacing: 0.3,
   },
   title: {
     ...typography.headingXl,
-    marginTop: spacing.lg,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   subtitle: {
     ...typography.body,
     color: colors.gray600,
     textAlign: 'center',
-    marginTop: spacing.sm,
   },
-  storePill: {
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.radiusFull,
-    backgroundColor: colors.primaryLight,
-  },
-  storePillText: {
-    ...typography.labelMd,
-    color: colors.primary,
+  thanks: {
+    ...typography.body,
+    color: colors.gray600,
+    textAlign: 'center',
+    marginTop: -spacing.sm,
   },
   pointPill: {
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: spacing.radiusMd,
-    backgroundColor: colors.successLight,
+    backgroundColor: colors.primaryLight,
   },
   pointPillText: {
     ...typography.labelMd,
-    color: colors.success,
+    color: colors.primary,
+    fontWeight: '700',
   },
   footer: {
     paddingHorizontal: spacing.xl,
