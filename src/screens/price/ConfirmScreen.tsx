@@ -62,7 +62,6 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
               .create({
                 name: item.productName,
                 category: 'other',
-                unitType: item.unitType ?? 'other',
               })
               .catch((error) => {
                 throw new Error(`상품 생성 실패: ${getErrorMessage(error)}`);
@@ -75,6 +74,7 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
             price: item.price,
             imageUrl,
             quantity: item.quantity,
+            unitType: item.unitType ?? 'other',
             saleStartDate: item.eventStart,
             saleEndDate: item.eventEnd,
             condition: item.condition,

@@ -112,7 +112,6 @@ export interface ProductResponse {
   id: string;
   name: string;
   category: ProductCategory;
-  unitType: UnitType;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,7 +119,6 @@ export interface ProductResponse {
 export interface CreateProductDto {
   name: string;
   category: ProductCategory;
-  unitType: UnitType;
 }
 
 // ─── Paginated ──────────────────────────────────────────────────────────────
@@ -141,6 +139,7 @@ export interface PriceResponse {
   product: ProductResponse;
   price: number;
   quantity: number | null;
+  unitType: UnitType;
   imageUrl: string;
   saleStartDate: string | null;
   saleEndDate: string | null;
@@ -162,6 +161,7 @@ export interface CreatePriceDto {
   price: number;
   imageUrl: string;
   quantity?: number;
+  unitType?: UnitType;
   saleStartDate?: string;
   saleEndDate?: string;
   condition?: string;
