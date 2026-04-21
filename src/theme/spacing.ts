@@ -144,7 +144,7 @@ export const spacing = {
   // FAB 텍스트 토큰 (MainTabNavigator FAB 플러스 아이콘)
   fabPlusFontSize: 28,
   fabPlusLineHeight: 32,
-  fabOverhang: 20,       // 탭바 상단 돌출 오프셋 (marginTop: -fabOverhang)
+  fabOverhang: 12,       // 탭바 상단 돌출 오프셋 (marginTop: -fabOverhang)
 
   // HomeScreen 전단지 팬 카드 토큰
   flyerFanWrapH: 120,

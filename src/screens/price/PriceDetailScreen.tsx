@@ -1050,11 +1050,12 @@ const styles = StyleSheet.create({
     color: colors.onErrorContainer,
   },
 
-  // ─── (F) CTA Bar — 탭바 바로 위 밀착. SafeArea는 TabBar가 처리함. ─────
+  // ─── (F) CTA Bar — FAB가 CTA 위로 돌출하는 것을 고려해 paddingBottom 여유 ─
   ctaBar: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     backgroundColor: colors.white,
     borderTopWidth: spacing.borderHairline,
     borderTopColor: colors.outlineVariant,
