@@ -81,9 +81,9 @@ jobs:
 
       - name: 환경 변수 파일 생성
         env:
-          PROD_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
-          PROD_KAKAO_APP_KEY: ${{ secrets.PROD_KAKAO_APP_KEY }}
-          PROD_NAVER_MAP_CLIENT_ID: ${{ secrets.PROD_NAVER_MAP_CLIENT_ID }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          KAKAO_APP_KEY: ${{ secrets.KAKAO_APP_KEY }}
+          NAVER_MAP_CLIENT_ID: ${{ secrets.NAVER_MAP_CLIENT_ID }}
           LOCAL_API_BASE_URL: ${{ secrets.LOCAL_API_BASE_URL }}
           LOCAL_KAKAO_APP_KEY: ${{ secrets.LOCAL_KAKAO_APP_KEY }}
           LOCAL_NAVER_MAP_CLIENT_ID: ${{ secrets.LOCAL_NAVER_MAP_CLIENT_ID }}
@@ -94,17 +94,23 @@ jobs:
           ENV_FILE="${{ steps.build_config.outputs.env_file }}"
 
           if [ "$TARGET" = "prod_release" ]; then
-            for key in PROD_API_BASE_URL PROD_KAKAO_APP_KEY PROD_NAVER_MAP_CLIENT_ID; do
-              if [ -z "${!key:-}" ]; then
-                echo "[ERROR] required production secret missing: $key"
-                exit 1
-              fi
-            done
+            if [ -z "${API_BASE_URL:-}" ]; then
+              echo "[ERROR] required production secret missing: API_BASE_URL"
+              exit 1
+            fi
+            if [ -z "${KAKAO_APP_KEY:-}" ]; then
+              echo "[ERROR] required production secret missing: KAKAO_APP_KEY"
+              exit 1
+            fi
+            if [ -z "${NAVER_MAP_CLIENT_ID:-}" ]; then
+              echo "[ERROR] required production secret missing: NAVER_MAP_CLIENT_ID"
+              exit 1
+            fi
 
             {
-              echo "API_BASE_URL=${PROD_API_BASE_URL}"
-              echo "KAKAO_APP_KEY=${PROD_KAKAO_APP_KEY}"
-              echo "NAVER_MAP_CLIENT_ID=${PROD_NAVER_MAP_CLIENT_ID}"
+              echo "API_BASE_URL=${API_BASE_URL}"
+              echo "KAKAO_APP_KEY=${KAKAO_APP_KEY}"
+              echo "NAVER_MAP_CLIENT_ID=${NAVER_MAP_CLIENT_ID}"
             } > "$ENV_FILE"
           else
             {
