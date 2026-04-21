@@ -64,8 +64,10 @@ jobs:
           fi
 
           PKG_VERSION=$(node -p "require('./package.json').version")
+          VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
           echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
           echo "version_name=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
 
           if [ "$TARGET" = "prod_release" ]; then
             echo "env_file=.env.production" >> "$GITHUB_OUTPUT"
@@ -185,7 +187,7 @@ jobs:
 
           cd android
           ENVFILE="../${ENV_FILE}" ./gradlew clean "$TASK" --no-daemon --stacktrace \
-            -PVERSION_CODE=${{ github.run_number }} \
+            -PVERSION_CODE=${{ steps.build_config.outputs.version_code }} \
             -PVERSION_NAME=${{ steps.build_config.outputs.version_name }}
 
       - name: 빌드 산출물 확인
