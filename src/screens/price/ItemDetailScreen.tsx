@@ -9,6 +9,8 @@ import {
   launchImageLibrary,
   launchCamera,
   type Asset,
+  type CameraOptions,
+  type ImageLibraryOptions,
 } from 'react-native-image-picker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { PriceRegisterScreenProps } from '../../navigation/types';
@@ -122,6 +124,20 @@ const ALLOWED_UPLOAD_MIME_TYPES = [
   'image/webp',
 ] as const;
 
+const IMAGE_LIBRARY_OPTIONS: ImageLibraryOptions = {
+  mediaType: 'photo',
+  quality: 0.8,
+  selectionLimit: 1,
+  assetRepresentationMode: 'compatible',
+  restrictMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+};
+
+const CAMERA_OPTIONS: CameraOptions = {
+  mediaType: 'photo',
+  quality: 0.8,
+  assetRepresentationMode: 'compatible',
+};
+
 const inferMimeTypeFromPath = (path: string): string | undefined => {
   const normalized = path.toLowerCase();
   if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
@@ -140,7 +156,7 @@ const inferMimeTypeFromPath = (path: string): string | undefined => {
 };
 
 const resolveImageMeta = (
-  asset: Pick<Asset, 'uri' | 'type' | 'fileName' | 'fileSize'>,
+  asset: Pick<Asset, 'uri' | 'type' | 'fileName' | 'fileSize' | 'originalPath'>,
 ): {
   uri: string;
   fileName?: string;
@@ -154,6 +170,7 @@ const resolveImageMeta = (
   const mimeType =
     asset.type?.toLowerCase() ??
     (asset.fileName ? inferMimeTypeFromPath(asset.fileName) : undefined) ??
+    (asset.originalPath ? inferMimeTypeFromPath(asset.originalPath) : undefined) ??
     inferMimeTypeFromPath(asset.uri);
 
   return {
@@ -301,7 +318,7 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handlePickImage = useCallback(() => {
     const applyPickedImage = (
-      asset: Pick<Asset, 'uri' | 'type' | 'fileName' | 'fileSize'> | undefined,
+      asset: Pick<Asset, 'uri' | 'type' | 'fileName' | 'fileSize' | 'originalPath'> | undefined,
     ) => {
       if (!asset) {
         return;
@@ -329,12 +346,12 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
     Alert.alert('사진 선택', '사진을 선택하는 방법을 선택해주세요.', [
       { text: '카메라', onPress: () => {
-        launchCamera({ mediaType: 'photo', quality: 0.8 }, res => {
+        launchCamera(CAMERA_OPTIONS, res => {
           applyPickedImage(res.assets?.[0]);
         });
       }},
       { text: '갤러리', onPress: () => {
-        launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, res => {
+        launchImageLibrary(IMAGE_LIBRARY_OPTIONS, res => {
           applyPickedImage(res.assets?.[0]);
         });
       }},
@@ -362,9 +379,19 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       hasError = true;
     }
 
+    const effectiveImageMimeType =
+      imageMimeType ??
+      (imageFileName ? inferMimeTypeFromPath(imageFileName) : undefined) ??
+      (imageUri ? inferMimeTypeFromPath(imageUri) : undefined);
+
+    if (!effectiveImageMimeType) {
+      newErrors.image = '이미지 형식을 확인할 수 없어요. 사진을 다시 선택해주세요.';
+      hasError = true;
+    }
+
     if (
-      imageMimeType &&
-      !(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(imageMimeType)
+      effectiveImageMimeType &&
+      !(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(effectiveImageMimeType)
     ) {
       newErrors.image = 'JPG, PNG, WEBP 형식의 사진만 등록할 수 있어요.';
       hasError = true;
@@ -434,7 +461,7 @@ const ItemDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       quantity: quantity ? parseInt(quantity, 10) : undefined,
       imageUri,
       imageFileName,
-      imageMimeType,
+      imageMimeType: effectiveImageMimeType,
       imageFileSize,
       condition: hasEvent ? '이벤트중' : undefined,
       quality,

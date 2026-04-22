@@ -23,6 +23,13 @@ import { getErrorMessage } from '../../utils/apiError';
 
 type Props = PriceRegisterScreenProps<'Confirm'>;
 
+const ALLOWED_UPLOAD_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+const normalizeMimeType = (mimeType: string | undefined): string | undefined => {
+  const normalized = mimeType?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+};
+
 const inferMimeTypeFromPath = (path: string): string | undefined => {
   const normalized = path.toLowerCase();
   if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
@@ -33,6 +40,9 @@ const inferMimeTypeFromPath = (path: string): string | undefined => {
   }
   if (normalized.endsWith('.webp')) {
     return 'image/webp';
+  }
+  if (normalized.endsWith('.heic') || normalized.endsWith('.heif')) {
+    return 'image/heic';
   }
   return undefined;
 };
@@ -97,9 +107,18 @@ const ConfirmScreen: React.FC<Props> = ({ navigation }) => {
           }
 
           const uploadMimeType =
-            item.imageMimeType ??
+            normalizeMimeType(item.imageMimeType) ??
             inferMimeTypeFromPath(item.imageFileName ?? item.imageUri) ??
-            'image/jpeg';
+            undefined;
+
+          if (!uploadMimeType) {
+            throw new Error('이미지 형식을 확인할 수 없습니다. 사진을 다시 선택해주세요.');
+          }
+
+          if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(uploadMimeType)) {
+            throw new Error('지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP 사진만 등록할 수 있어요.');
+          }
+
           const uploadFileName = ensureUploadFileName(
             item.imageFileName ?? inferFileNameFromPath(item.imageUri),
             uploadMimeType,

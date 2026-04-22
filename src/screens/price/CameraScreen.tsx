@@ -11,6 +11,25 @@ import { typography } from '../../theme/typography';
 
 type Props = PriceRegisterScreenProps<'Camera'>;
 
+const ALLOWED_UPLOAD_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+const inferMimeTypeFromPath = (path: string): string | undefined => {
+  const normalized = path.toLowerCase();
+  if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (normalized.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (normalized.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  if (normalized.endsWith('.heic') || normalized.endsWith('.heif')) {
+    return 'image/heic';
+  }
+  return undefined;
+};
+
 const CameraScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<Camera>(null);
@@ -72,17 +91,36 @@ const CameraScreen: React.FC<Props> = ({ navigation }) => {
   }, [navigation, animateShutterPress]);
 
   const handlePickFromGallery = useCallback(() => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
+    launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
+      restrictMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    }, (response) => {
       if (response.didCancel) return;
       if (response.errorCode) { Alert.alert('오류', '이미지를 불러오는 데 실패했습니다.'); return; }
       const asset = response.assets?.[0];
       const uri = asset?.uri;
       if (!uri) return;
 
+      const imageMimeType =
+        asset.type?.toLowerCase() ??
+        (asset.fileName ? inferMimeTypeFromPath(asset.fileName) : undefined) ??
+        inferMimeTypeFromPath(uri);
+
+      if (
+        imageMimeType &&
+        !(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(imageMimeType)
+      ) {
+        Alert.alert('지원하지 않는 이미지 형식', 'JPG, PNG, WEBP 형식의 사진만 등록할 수 있어요.');
+        return;
+      }
+
       navigation.navigate('OcrResult', {
         imageUri: uri,
         imageFileName: asset.fileName,
-        imageMimeType: asset.type,
+        imageMimeType,
         imageFileSize: asset.fileSize,
       });
     });
