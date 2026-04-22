@@ -544,6 +544,9 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                       <StoreHistorySheet
                         storeId={rep.store.id}
                         productId={rep.product.id}
+                        storeLat={rep.store.latitude}
+                        storeLng={rep.store.longitude}
+                        storeName={rep.store.name}
                       />
                     ) : null}
                   </View>

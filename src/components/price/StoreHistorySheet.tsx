@@ -6,10 +6,15 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography, PJS } from '../../theme/typography';
 import { formatRelativeTime } from '../../utils/format';
+import { openMapApp } from '../../utils/openMapApp';
 
 interface StoreHistorySheetProps {
   storeId: string;
   productId: string;
+  /** 길찾기 버튼 표시용 매장 좌표/이름. 미제공 시 버튼 숨김. */
+  storeLat?: number | null;
+  storeLng?: number | null;
+  storeName?: string;
 }
 
 type SortKey = 'low' | 'latest' | 'mostConfirm' | 'mostDispute';
@@ -29,9 +34,27 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
  *
  * 정렬 토글 4종 (SCREENS.md 섹션 4-2 E).
  */
-const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({ storeId, productId }) => {
+const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({
+  storeId,
+  productId,
+  storeLat,
+  storeLng,
+  storeName,
+}) => {
   const { data, isLoading, isError } = useStorePrices(storeId);
   const [sortKey, setSortKey] = useState<SortKey>('latest');
+
+  const canNavigate =
+    typeof storeLat === 'number' &&
+    typeof storeLng === 'number' &&
+    !isNaN(storeLat) &&
+    !isNaN(storeLng) &&
+    !!storeName;
+
+  const handleDirections = () => {
+    if (!canNavigate) return;
+    void openMapApp(storeLat as number, storeLng as number, storeName as string);
+  };
 
   const rows = useMemo(() => {
     const all = data?.data ?? [];
@@ -62,6 +85,18 @@ const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({ storeId, productI
         <Text style={styles.headerTitle}>이 마트 등록 이력</Text>
         <Text style={styles.headerCount}>{rows.length}건</Text>
       </View>
+
+      {/* 길찾기 CTA — 매장 좌표/이름 있을 때만 노출 */}
+      {canNavigate ? (
+        <TouchableOpacity
+          style={styles.directionsBtn}
+          onPress={handleDirections}
+          accessibilityRole="button"
+          accessibilityLabel={`${storeName ?? '매장'}으로 길찾기`}
+        >
+          <Text style={styles.directionsBtnText}>📍 {storeName} 길찾기</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* 정렬 토글 */}
       <View style={styles.sortRow}>
@@ -160,6 +195,19 @@ const styles = StyleSheet.create({
   headerCount: {
     ...typography.caption,
     color: colors.onSurfaceVariant,
+  },
+  directionsBtn: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.radiusMd,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  directionsBtnText: {
+    fontFamily: PJS.bold,
+    fontSize: 13,
+    color: colors.white,
   },
   sortRow: {
     flexDirection: 'row',
