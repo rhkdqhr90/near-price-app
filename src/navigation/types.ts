@@ -51,6 +51,16 @@ export type HomeStackParamList = {
   Search: { initialQuery?: string };
   // 상품 상세: 기본 진입은 productId+productName. 알림 딥링크 등 특정 가격 포커스 시 priceId.
   PriceDetail: { productId: string; productName: string; priceId?: string };
+  // 단일 가격 엔트리 상세 — 맞아요/달라요/신고. StoreHistorySheet 행 탭 시 진입.
+  PriceEntryDetail: { priceId: string };
+  // 매장 × 상품 전체 등록 이력 — StoreHistorySheet 더보기 탭 시 진입.
+  StoreProductHistory: {
+    storeId: string;
+    productId: string;
+    storeName?: string;
+    storeLat?: number | null;
+    storeLng?: number | null;
+  };
   StoreDetail: { storeId: string };
   StoreInfo: { storeId: string };
   Notifications: undefined;

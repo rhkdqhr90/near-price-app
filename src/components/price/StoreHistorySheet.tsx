@@ -15,7 +15,14 @@ interface StoreHistorySheetProps {
   storeLat?: number | null;
   storeLng?: number | null;
   storeName?: string;
+  /** 히스토리 행 탭 시 호출 — 가격 엔트리 상세로 진입. */
+  onPressRow?: (priceId: string) => void;
+  /** "더보기" 탭 시 호출 — 매장 × 상품 전체 이력 화면으로 진입. */
+  onViewMore?: () => void;
 }
+
+/** 시트 인라인 노출 건수 상한. 초과 시 "더보기" 버튼 노출. */
+const INLINE_LIMIT = 3;
 
 type SortKey = 'low' | 'latest' | 'mostConfirm' | 'mostDispute';
 
@@ -40,6 +47,8 @@ const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({
   storeLat,
   storeLng,
   storeName,
+  onPressRow,
+  onViewMore,
 }) => {
   const { data, isLoading, isError } = useStorePrices(storeId);
   const [sortKey, setSortKey] = useState<SortKey>('latest');
@@ -134,19 +143,63 @@ const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({
         </View>
       ) : (
         <View style={styles.list}>
-          {rows.map((row) => (
-            <HistoryRow key={row.id} row={row} />
+          {rows.slice(0, INLINE_LIMIT).map((row) => (
+            <HistoryRow
+              key={row.id}
+              row={row}
+              onPress={onPressRow ? () => onPressRow(row.id) : undefined}
+            />
           ))}
+          {rows.length > INLINE_LIMIT && onViewMore ? (
+            <TouchableOpacity
+              style={styles.viewMoreBtn}
+              onPress={onViewMore}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`전체 이력 ${rows.length}건 보기`}
+            >
+              <Text style={styles.viewMoreBtnText}>
+                더보기 ({rows.length - INLINE_LIMIT}건) ›
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       )}
     </View>
   );
 };
 
-const HistoryRow: React.FC<{ row: PriceResponse }> = ({ row }) => {
+const HistoryRow: React.FC<{ row: PriceResponse; onPress?: () => void }> = ({
+  row,
+  onPress,
+}) => {
   const nickname = row.user?.nickname ?? '익명';
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        style={styles.row}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="가격 상세 보기"
+      >
+        <HistoryRowInner row={row} nickname={nickname} />
+      </TouchableOpacity>
+    );
+  }
   return (
     <View style={styles.row}>
+      <HistoryRowInner row={row} nickname={nickname} />
+    </View>
+  );
+};
+
+const HistoryRowInner: React.FC<{ row: PriceResponse; nickname: string }> = ({
+  row,
+  nickname,
+}) => {
+  return (
+    <>
       <View style={styles.rowLeft}>
         <View style={styles.rowPriceLine}>
           <Text style={styles.rowPrice}>
@@ -166,7 +219,7 @@ const HistoryRow: React.FC<{ row: PriceResponse }> = ({ row }) => {
         <Text style={styles.voteText}>👍 {row.confirmedCount}</Text>
         <Text style={styles.voteText}>👎 {row.disputedCount}</Text>
       </View>
-    </View>
+    </>
   );
 };
 
@@ -241,6 +294,18 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.sm,
+  },
+  viewMoreBtn: {
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: spacing.borderHairline,
+    borderTopColor: colors.surfaceContainerHigh,
+  },
+  viewMoreBtnText: {
+    fontFamily: PJS.bold,
+    fontSize: 12,
+    color: colors.primary,
   },
   row: {
     flexDirection: 'row',

@@ -18,6 +18,8 @@ import { typography, PJS } from '../theme/typography';
 import HomeScreen from '../screens/home/HomeScreen';
 import SearchScreen from '../screens/home/SearchScreen';
 import PriceDetailScreen from '../screens/price/PriceDetailScreen';
+import PriceEntryDetailScreen from '../screens/price/PriceEntryDetailScreen';
+import StoreProductHistoryScreen from '../screens/price/StoreProductHistoryScreen';
 import StoreDetailScreen from '../screens/price/StoreDetailScreen';
 import StoreInfoScreen from '../screens/price/StoreInfoScreen';
 import NotificationListScreen from '../screens/notification/NotificationListScreen';
@@ -71,6 +73,16 @@ const HomeStackNavigator: React.FC = () => (
     <HomeStack.Screen
       name="PriceDetail"
       component={PriceDetailScreen}
+      options={{ headerShown: false }}
+    />
+    <HomeStack.Screen
+      name="PriceEntryDetail"
+      component={PriceEntryDetailScreen}
+      options={{ headerShown: false }}
+    />
+    <HomeStack.Screen
+      name="StoreProductHistory"
+      component={StoreProductHistoryScreen}
       options={{ headerShown: false }}
     />
     <HomeStack.Screen

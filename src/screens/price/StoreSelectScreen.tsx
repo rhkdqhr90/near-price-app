@@ -45,6 +45,7 @@ import { typography, PJS } from '../../theme/typography';
 import { DEFAULT_LATITUDE, DEFAULT_LONGITUDE } from '../../utils/constants';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getStoreCategoryColors } from '../../utils/storeCategory';
+import { getDistanceM } from '../../utils/format';
 
 // ─── 네이버 카테고리 → StoreType 추론 ─────────────────────────────────────────
 const inferStoreType = (category: string): StoreType => {
@@ -63,6 +64,31 @@ const normalizeRegionHint = (value?: string | null): string | null => {
   return trimmed;
 };
 
+const parseNaverCoords = (
+  place: NaverPlaceDocument,
+): { latitude: number; longitude: number } | null => {
+  const latitude = parseFloat(place.y);
+  const longitude = parseFloat(place.x);
+  if (isNaN(latitude) || isNaN(longitude)) return null;
+  return { latitude, longitude };
+};
+
+const getDistanceFromOrigin = (
+  originLatitude: number | null,
+  originLongitude: number | null,
+  targetLatitude: number,
+  targetLongitude: number,
+): number | null => {
+  const distance = getDistanceM(
+    originLatitude,
+    originLongitude,
+    targetLatitude,
+    targetLongitude,
+  );
+  if (!Number.isFinite(distance)) return null;
+  return Math.round(distance);
+};
+
 type Props = PriceRegisterScreenProps<'StoreSelect'>;
 
 interface GpsCoords {
@@ -77,6 +103,12 @@ type SelectedStore =
 
 const NEARBY_RADIUS_M = 3000; // 주변 매장 기본 반경 3km
 const USER_RADIUS_M = 500;    // 지도 반경 원 표시용
+const SEARCH_RADIUS_M = NEARBY_RADIUS_M;
+
+const isWithinSearchRadius = (distanceM: number | null): boolean => {
+  if (distanceM == null) return false;
+  return distanceM <= SEARCH_RADIUS_M;
+};
 
 const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -230,7 +262,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
       );
     };
 
-    void run();
+    run().catch(() => undefined);
   }, []);
 
   // ─── 지도 중심 ────────────────────────────────────────────────────────────
@@ -249,28 +281,89 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
   }, [nearbyStores]);
 
   // 검색 중 DB 결과를 "감지 가능 매장" 으로 merge
-  type ListItem =
-    | { kind: 'db'; store: NearbyStoreResponse }
-    | { kind: 'naver'; place: NaverPlaceDocument };
+  type DbListItem = {
+    kind: 'db';
+    store: NearbyStoreResponse;
+    distanceM: number | null;
+  };
+
+  type NaverListItem = {
+    kind: 'naver';
+    place: NaverPlaceDocument;
+    distanceM: number | null;
+  };
+
+  type ListItem = DbListItem | NaverListItem;
 
   const listData = useMemo<ListItem[]>(() => {
     if (isSearching) {
-      const dbMatches: ListItem[] = (dbSearchStores ?? []).map(s => ({
-        kind: 'db',
-        store: { ...s, distance: 0 } as NearbyStoreResponse,
-      }));
+      const originLatitude = gpsCoords?.latitude ?? regionLat ?? null;
+      const originLongitude = gpsCoords?.longitude ?? regionLng ?? null;
+
+      const dbMatches: DbListItem[] = (dbSearchStores ?? [])
+        .map(s => {
+          const distanceM = getDistanceFromOrigin(
+            originLatitude,
+            originLongitude,
+            s.latitude,
+            s.longitude,
+          );
+
+          return {
+            kind: 'db' as const,
+            store: {
+              ...s,
+              distance: distanceM ?? 0,
+            } as NearbyStoreResponse,
+            distanceM,
+          };
+        })
+        .filter(item => isWithinSearchRadius(item.distanceM));
+
       const naverIds = new Set(
         (dbSearchStores ?? [])
           .map(s => s.externalPlaceId)
           .filter((v): v is string => !!v),
       );
-      const naverItems: ListItem[] = (naverPlaces ?? [])
+
+      const naverItems: NaverListItem[] = (naverPlaces ?? [])
         .filter(p => !naverIds.has(p.id))
-        .map(p => ({ kind: 'naver', place: p }));
-      return [...dbMatches, ...naverItems];
+        .map(p => {
+          const coords = parseNaverCoords(p);
+          const distanceM = coords
+            ? getDistanceFromOrigin(
+                originLatitude,
+                originLongitude,
+                coords.latitude,
+                coords.longitude,
+              )
+            : null;
+
+          return {
+            kind: 'naver' as const,
+            place: p,
+            distanceM,
+          };
+        })
+        .filter(item => isWithinSearchRadius(item.distanceM));
+
+      return [...dbMatches, ...naverItems].sort((a, b) => {
+        if (a.distanceM === null && b.distanceM === null) return 0;
+        if (a.distanceM === null) return 1;
+        if (b.distanceM === null) return -1;
+        return a.distanceM - b.distanceM;
+      });
     }
-    return sortedNearby.map(s => ({ kind: 'db', store: s }));
-  }, [isSearching, dbSearchStores, naverPlaces, sortedNearby]);
+    return sortedNearby.map(s => ({ kind: 'db', store: s, distanceM: s.distance }));
+  }, [
+    isSearching,
+    dbSearchStores,
+    naverPlaces,
+    sortedNearby,
+    gpsCoords,
+    regionLat,
+    regionLng,
+  ]);
 
   // ─── 지도 마커 ────────────────────────────────────────────────────────────
   const mapMarkers = useMemo(
@@ -286,13 +379,12 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
               type: item.store.type,
             };
           }
-          const lat = parseFloat(item.place.y);
-          const lng = parseFloat(item.place.x);
-          if (isNaN(lat) || isNaN(lng)) return null;
+          const coords = parseNaverCoords(item.place);
+          if (!coords) return null;
           return {
             id: item.place.id,
-            latitude: lat,
-            longitude: lng,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
             title: item.place.name,
             type: inferStoreType(item.place.category),
           };
@@ -388,7 +480,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
           ? item.store.address
           : item.place.roadAddress || item.place.address;
       const distance =
-        item.kind === 'db' && !isSearching ? item.store.distance : null;
+        item.distanceM;
       const type =
         item.kind === 'db'
           ? item.store.type
@@ -405,7 +497,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
         />
       );
     },
-    [selectedId, isSearching, handleSelectItem],
+    [selectedId, handleSelectItem],
   );
 
   const keyExtractor = useCallback(
@@ -562,7 +654,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={
             <Text style={styles.emptyText}>
               {isSearching
-                ? '검색 결과가 없어요. 아래 "새 매장 직접 등록" 을 이용해 주세요.'
+                ? '내 위치 기준 3km 내 검색 결과가 없어요. 아래 "새 매장 직접 등록" 을 이용해 주세요.'
                 : '주변에 등록된 매장이 없어요.'}
             </Text>
           }

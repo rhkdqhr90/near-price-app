@@ -16,7 +16,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HomeScreenProps } from '../../navigation/types';
-import type { PriceResponse, ProductCategory } from '../../types/api.types';
+import type { PriceResponse } from '../../types/api.types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography, PJS } from '../../theme/typography';
@@ -40,19 +40,7 @@ import { classifyError } from '../../utils/apiError';
 
 type Props = HomeScreenProps<'PriceDetail'>;
 
-type TabKey = 'stores' | 'history' | 'info';
-
-const CATEGORY_LABELS: Record<ProductCategory, string> = {
-  vegetable: '채소',
-  fruit: '과일',
-  meat: '육류',
-  seafood: '해산물',
-  dairy: '유제품',
-  grain: '곡류',
-  processed: '가공식품',
-  household: '생활용품',
-  other: '기타',
-};
+type TabKey = 'stores' | 'history';
 
 // Haversine 거리 계산 (미터 단위)
 const haversineM = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -284,29 +272,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     setExpandedStoreId((prev) => (prev === storeId ? null : storeId));
   }, []);
 
-  const handleConfirmPrice = useCallback(() => {
-    if (isOwnPrice) {
-      showToast('본인이 등록한 가격은 검증할 수 없어요', 'error');
-      return;
-    }
-    if (hasVerified) {
-      showToast('이미 검증에 참여했어요', 'error');
-      return;
-    }
-    verifyPrice(
-      { result: 'confirmed' },
-      {
-        onSuccess: () => {
-          Vibration.vibrate(30);
-          showToast('가격을 확인했어요!', 'success');
-        },
-        onError: () => {
-          showToast('가격 확인 처리에 실패했습니다.', 'error');
-        },
-      },
-    );
-  }, [verifyPrice, showToast, isOwnPrice, hasVerified]);
-
   const handleDisputeSubmit = useCallback(() => {
     if (isOwnPrice) {
       setDisputeError('본인이 등록한 가격은 검증할 수 없습니다');
@@ -406,7 +371,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   const productName = focusedPrice.product.name;
-  const categoryLabel = CATEGORY_LABELS[focusedPrice.product.category] ?? '기타';
   const heroPrice = lowPrice.toLocaleString('ko-KR');
 
   return (
@@ -502,7 +466,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           {([
             { k: 'stores' as const, l: `가격 비교 · ${compareCount}` },
             { k: 'history' as const, l: '가격 추이' },
-            { k: 'info' as const, l: '품목 정보' },
           ]).map((tb) => {
             const active = tab === tb.k;
             return (
@@ -547,6 +510,18 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         storeLat={rep.store.latitude}
                         storeLng={rep.store.longitude}
                         storeName={rep.store.name}
+                        onPressRow={(pid) =>
+                          navigation.navigate('PriceEntryDetail', { priceId: pid })
+                        }
+                        onViewMore={() =>
+                          navigation.navigate('StoreProductHistory', {
+                            storeId: rep.store.id,
+                            productId: rep.product.id,
+                            storeName: rep.store.name,
+                            storeLat: rep.store.latitude,
+                            storeLng: rep.store.longitude,
+                          })
+                        }
                       />
                     ) : null}
                   </View>
@@ -590,48 +565,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 동네 제보가 쌓이면 차트가 표시됩니다.
               </Text>
             </View>
-          </View>
-        ) : null}
-
-        {/* D-3 품목 정보 */}
-        {tab === 'info' ? (
-          <View style={styles.tabContent}>
-            <View style={styles.infoCard}>
-              <InfoRow label="카테고리" value={categoryLabel} />
-              <InfoRow label="최근 업데이트" value={formatRelativeTime(focusedPrice.createdAt)} />
-              <InfoRow label="첫 등록자" value={focusedPrice.user?.nickname ?? '익명'} />
-              <InfoRow label="누적 제보" value={`${allPrices.length}건`} />
-            </View>
-
-            {/* 맞아요/달라요 — 본인 등록 아닐 때만 */}
-            {!isOwnPrice && currentUserId ? (
-              <View style={styles.verifyRow}>
-                <TouchableOpacity
-                  style={[styles.verifyBtn, styles.confirmBtn, hasVerified && styles.verifyBtnDisabled]}
-                  onPress={handleConfirmPrice}
-                  disabled={hasVerified || isVerifying}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="가격이 맞아요"
-                >
-                  <Text style={styles.confirmBtnText}>
-                    맞아요 ✓ {focusedPrice.confirmedCount}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.verifyBtn, styles.disputeBtn, hasVerified && styles.verifyBtnDisabled]}
-                  onPress={() => setShowDisputeModal(true)}
-                  disabled={hasVerified || isVerifying}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="가격이 달라요"
-                >
-                  <Text style={styles.disputeBtnText}>
-                    달라요 ✗ {focusedPrice.disputedCount}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
         ) : null}
 
@@ -739,14 +672,6 @@ const PriceDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     </SafeAreaView>
   );
 };
-
-// ─── 작은 서브 컴포넌트 ────────────────────────────────────────────────────────
-const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
-  </View>
-);
 
 const HERO_H = 160;
 const MAP_BTN_SIZE = 44;
@@ -1019,6 +944,13 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     fontFamily: PJS.bold,
     color: colors.onBackground,
+  },
+  infoHint: {
+    ...typography.caption,
+    color: colors.onSurfaceVariant,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
 
   verifyRow: {
