@@ -21,7 +21,10 @@ export type BadgeType =
   | 'verification_500'
   | 'trust_70_30'
   | 'trust_85_60'
-  | 'trust_95_90';
+  | 'trust_95_90'
+  | 'point_100'
+  | 'point_500'
+  | 'point_2000';
 
 interface Props {
   type: BadgeType | (string & {});
@@ -448,6 +451,46 @@ const BadgeIcon: React.FC<Props> = ({ type, size = 40, earned = true }) => {
             strokeWidth={1.2}
             strokeLinecap="round"
             opacity={0.5}
+          />
+        </Svg>
+      );
+
+    // ── 포인트 뱃지 ──────────────────────────────────────────────────────────
+
+    // point_100: 코인 1개
+    case 'point_100':
+      return (
+        <Svg {...svgProps}>
+          <Circle cx="20" cy="20" r="12" fill={fill} stroke={c} strokeWidth={2} />
+          <Path
+            d="M16 20h8M20 16v8"
+            stroke={d}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        </Svg>
+      );
+
+    // point_500: 코인 더미
+    case 'point_500':
+      return (
+        <Svg {...svgProps}>
+          <Circle cx="15" cy="22" r="8" fill={fill} stroke={c} strokeWidth={2} />
+          <Circle cx="24" cy="18" r="8" fill={fill} stroke={d} strokeWidth={2} />
+          <Path d="M24 14v8" stroke={a} strokeWidth={2} strokeLinecap="round" />
+          <Path d="M20 18h8" stroke={a} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+      );
+
+    // point_2000: 메달
+    case 'point_2000':
+      return (
+        <Svg {...svgProps}>
+          <Path d="M14 7h12l-4 10h-4L14 7z" fill={a} opacity={0.85} />
+          <Circle cx="20" cy="24" r="10" fill={fill} stroke={c} strokeWidth={2} />
+          <Polygon
+            points="20,18 21.8,22.2 26.3,22.2 22.7,24.8 24.2,29.2 20,26.5 15.8,29.2 17.3,24.8 13.7,22.2 18.2,22.2"
+            fill={d}
           />
         </Svg>
       );

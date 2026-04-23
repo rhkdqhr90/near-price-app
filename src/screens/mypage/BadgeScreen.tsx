@@ -24,7 +24,7 @@ interface BadgeGridItem {
   type: BadgeType | (string & {});
   name: string;
   icon: string;
-  category: 'registration' | 'verification' | 'trust';
+  category: 'registration' | 'verification' | 'trust' | 'point';
   isEarned: boolean;
   description: string;
   earnedAt?: string;
@@ -41,6 +41,9 @@ const BADGE_DESCRIPTIONS: Record<string, string> = {
   'verification_master': '검증 마스터',
   'trusted_user': '신뢰받는 사용자',
   'highest_trust': '최고 신뢰도 사용자',
+  'point_100': '포인트 100점 달성',
+  'point_500': '포인트 500점 달성',
+  'point_2000': '포인트 2000점 달성',
 };
 
 interface BadgeItemProps {
@@ -115,7 +118,12 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
   const badgeItems = React.useMemo<BadgeGridItem[]>(() => {
     if (!badgesData) return [];
 
-    const categoryOrder: Record<string, number> = { registration: 0, verification: 1, trust: 2 };
+    const categoryOrder: Record<string, number> = {
+      registration: 0,
+      verification: 1,
+      point: 2,
+      trust: 3,
+    };
     const allBadges: BadgeGridItem[] = [
       ...badgesData.earned.map(badge => ({
         type: badge.type,

@@ -8,6 +8,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatPrice } from '../../utils/format';
 import CheckIcon from '../../components/icons/CheckIcon';
+import { useMyPointSummary } from '../../hooks/queries/usePoints';
 
 type Props = PriceRegisterScreenProps<'Done'>;
 
@@ -22,6 +23,11 @@ type Props = PriceRegisterScreenProps<'Done'>;
 const RegisterDoneScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { itemCount, firstItemName, firstItemPrice } = route.params;
+  const {
+    data: pointSummary,
+    isLoading: isPointLoading,
+    isError: isPointError,
+  } = useMyPointSummary();
 
   const summaryText = useMemo(() => {
     if (!firstItemName || firstItemPrice == null) {
@@ -31,7 +37,15 @@ const RegisterDoneScreen: React.FC<Props> = ({ navigation, route }) => {
     return `${firstItemName}${extra} · ${formatPrice(firstItemPrice)}`;
   }, [firstItemName, firstItemPrice, itemCount]);
 
-  const points = itemCount * 12;
+  const pointPillText = useMemo(() => {
+    if (isPointLoading) {
+      return '포인트 반영 중...';
+    }
+    if (isPointError || !pointSummary) {
+      return '포인트를 불러오지 못했어요';
+    }
+    return `보유 ${pointSummary.availablePoints.toLocaleString()} 포인트`;
+  }, [isPointError, isPointLoading, pointSummary]);
 
   const handleGoHome = useCallback(() => {
     navigation.dispatch(StackActions.popToTop());
@@ -50,7 +64,7 @@ const RegisterDoneScreen: React.FC<Props> = ({ navigation, route }) => {
         <Text style={styles.thanks}>이웃에게 큰 도움이 될 거예요 🙏</Text>
 
         <View style={styles.pointPill}>
-          <Text style={styles.pointPillText}>{`+${points} 포인트`}</Text>
+          <Text style={styles.pointPillText}>{pointPillText}</Text>
         </View>
       </View>
 

@@ -22,6 +22,7 @@ import { useMyPrices } from '../../hooks/queries/usePrices';
 import { useMyWishlist } from '../../hooks/queries/useWishlist';
 import { useUserBadges } from '../../hooks/queries/useBadges';
 import { useMyVerifications } from '../../hooks/queries/useVerification';
+import { useMyPointSummary } from '../../hooks/queries/usePoints';
 import MenuItem from '../../components/common/MenuItem';
 import SkeletonBox from '../../components/common/SkeletonBox';
 import TagIcon from '../../components/icons/TagIcon';
@@ -290,6 +291,11 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
   const { data: wishlist, isLoading: isWishlistLoading, isError: isWishlistError } = useMyWishlist();
   const { data: badgesData, isLoading: isBadgesLoading } = useUserBadges(user?.id);
   const { data: verifications, isLoading: isVerificationsLoading, isError: isVerificationsError } = useMyVerifications();
+  const {
+    data: pointSummary,
+    isLoading: isPointLoading,
+    isError: isPointError,
+  } = useMyPointSummary();
 
   const [nicknameModalVisible, setNicknameModalVisible] = useState(false);
 
@@ -318,6 +324,18 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
   const wishlistCount = useMemo(
     () => isWishlistError ? '-' : isWishlistLoading ? '...' : String(wishlist?.totalCount ?? 0),
     [wishlist, isWishlistLoading, isWishlistError],
+  );
+  const availablePointText = useMemo(
+    () => isPointError ? '-' : isPointLoading ? '...' : String(pointSummary?.availablePoints ?? 0),
+    [isPointError, isPointLoading, pointSummary?.availablePoints],
+  );
+  const weeklyPointText = useMemo(
+    () => isPointError ? '-' : isPointLoading ? '...' : `${pointSummary?.weeklyNetPoints ?? 0}`,
+    [isPointError, isPointLoading, pointSummary?.weeklyNetPoints],
+  );
+  const monthlyPointText = useMemo(
+    () => isPointError ? '-' : isPointLoading ? '...' : `${pointSummary?.monthlyNetPoints ?? 0}`,
+    [isPointError, isPointLoading, pointSummary?.monthlyNetPoints],
   );
   // 진행중 뱃지 우선, 최대 2개 표시
   const displayBadges = useMemo(() => {
@@ -528,6 +546,27 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {/* 2-1. 포인트 요약 카드 */}
+        <View style={styles.pointSummarySection}>
+          <Text style={styles.pointSummaryTitle}>포인트</Text>
+          <View style={styles.pointSummaryCard}>
+            <View style={styles.pointSummaryItem}>
+              <Text style={styles.pointSummaryValue}>{availablePointText}</Text>
+              <Text style={styles.pointSummaryLabel}>보유 포인트</Text>
+            </View>
+            <View style={styles.pointDivider} />
+            <View style={styles.pointSummaryItem}>
+              <Text style={styles.pointSummaryValue}>{weeklyPointText}</Text>
+              <Text style={styles.pointSummaryLabel}>주간 순증감</Text>
+            </View>
+            <View style={styles.pointDivider} />
+            <View style={styles.pointSummaryItem}>
+              <Text style={styles.pointSummaryValue}>{monthlyPointText}</Text>
+              <Text style={styles.pointSummaryLabel}>월간 순증감</Text>
+            </View>
+          </View>
+        </View>
+
         {/* 3. 뱃지 섹션 */}
         {(isBadgesLoading || displayBadges.length > 0) && (
           <View style={styles.sectionOuter}>
@@ -567,7 +606,13 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
                       <View>
                         <Text style={styles.badgeName}>{item.data.name}</Text>
                         <Text style={styles.badgeCategory}>
-                          {item.data.category === 'registration' ? '가격 등록' : item.data.category === 'verification' ? '가격 검증' : '신뢰도'}
+                          {item.data.category === 'registration'
+                            ? '가격 등록'
+                            : item.data.category === 'verification'
+                              ? '가격 검증'
+                              : item.data.category === 'point'
+                                ? '포인트'
+                                : '신뢰도'}
                         </Text>
                       </View>
                     </View>
@@ -820,6 +865,47 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.gray600,
     textAlign: 'center',
+  },
+  pointSummarySection: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  pointSummaryTitle: {
+    ...typography.caption,
+    fontWeight: '700' as const,
+    color: colors.gray600,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  pointSummaryCard: {
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusMd,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: spacing.borderMedium,
+  },
+  pointSummaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  pointSummaryValue: {
+    ...typography.headingMd,
+    color: colors.primary,
+    marginBottom: spacing.micro,
+  },
+  pointSummaryLabel: {
+    ...typography.caption,
+    color: colors.gray600,
+    textAlign: 'center',
+  },
+  pointDivider: {
+    width: spacing.borderThin,
+    height: spacing.xxl,
+    backgroundColor: colors.gray200,
+    marginHorizontal: spacing.sm,
   },
 
   // ─── 섹션 공통 ────────────────────────────────────────────────────────

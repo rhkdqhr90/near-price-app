@@ -381,7 +381,7 @@ export interface BadgeInfo {
   type: string;
   name: string;
   icon: string;
-  category: 'registration' | 'verification' | 'trust';
+  category: 'registration' | 'verification' | 'trust' | 'point';
   earnedAt?: string;
 }
 
@@ -389,7 +389,7 @@ export interface BadgeProgress {
   type: string;
   name: string;
   icon: string;
-  category: 'registration' | 'verification' | 'trust';
+  category: 'registration' | 'verification' | 'trust' | 'point';
   current: number;
   threshold: number;
   progressPercent: number;
@@ -398,6 +398,43 @@ export interface BadgeProgress {
 export interface UserBadgesResponse {
   earned: BadgeInfo[];
   progress: BadgeProgress[];
+}
+
+// ─── Points ───────────────────────────────────────────────────────────────
+
+export interface PointSummaryResponse {
+  availablePoints: number;
+  pendingPoints: number;
+  weeklyNetPoints: number;
+  monthlyNetPoints: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+  calculatedAt: string;
+}
+
+export type PointDirection = 'earn' | 'deduct' | 'revoke' | 'adjust';
+export type PointStatus = 'confirmed' | 'pending' | 'cancelled';
+export type PointSourceType =
+  | 'price_create'
+  | 'price_delete'
+  | 'price_disputed'
+  | 'admin_adjust';
+
+export interface PointTransactionItem {
+  id: string;
+  direction: PointDirection;
+  status: PointStatus;
+  amount: number;
+  signedAmount: number;
+  sourceType: PointSourceType;
+  sourceId: string;
+  createdAt: string;
+  effectiveAt: string;
+}
+
+export interface PointTransactionListResponse {
+  items: PointTransactionItem[];
+  nextCursor: string | null;
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────
