@@ -1,34 +1,112 @@
-import { Linking, Alert } from 'react-native';
+import { Linking, Alert, Platform } from 'react-native';
+import Geolocation from 'react-native-geolocation-service';
+import { useLocationStore } from '../store/locationStore';
+
+interface CurrentLocation {
+  latitude: number;
+  longitude: number;
+}
 
 // 길찾기 대상 지도 앱. 설치된 앱만 선택 UI에 노출.
 interface MapApp {
   name: string;
-  appUrl: (lat: number, lng: number, name: string) => string;
-  webUrl: (lat: number, lng: number, name: string) => string;
-  scheme: string;
+  appUrl: (
+    lat: number,
+    lng: number,
+    name: string,
+    currentLocation: CurrentLocation | null,
+  ) => string;
+  webUrl: (
+    lat: number,
+    lng: number,
+    name: string,
+    currentLocation: CurrentLocation | null,
+  ) => string;
+  canOpenUrls: string[];
 }
+
+const getStoredLocation = (): CurrentLocation | null => {
+  const { latitude, longitude } = useLocationStore.getState();
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+  return { latitude, longitude };
+};
+
+const resolveCurrentLocation = async (): Promise<CurrentLocation | null> => {
+  return await new Promise((resolve) => {
+    Geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      () => resolve(getStoredLocation()),
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 3000,
+        forceRequestLocation: true,
+      },
+    );
+  });
+};
 
 const MAP_APPS: MapApp[] = [
   {
     name: '네이버 지도',
-    appUrl: (lat, lng, name) =>
-      `nmap://route/walk?dlat=${lat}&dlng=${lng}&dname=${encodeURIComponent(name)}&appname=com.nearprice`,
-    webUrl: (lat, lng, name) =>
-      `https://map.naver.com/v5/directions/-/${lng},${lat},${encodeURIComponent(name)}/-/walk`,
-    scheme: 'nmap://',
+    appUrl: (lat, lng, name, currentLocation) => {
+      const destinationName = encodeURIComponent(name);
+      if (!currentLocation) {
+        return `nmap://route/walk?dlat=${lat}&dlng=${lng}&dname=${destinationName}&appname=com.nearpriceapp`;
+      }
+      return `nmap://route/walk?slat=${currentLocation.latitude}&slng=${currentLocation.longitude}&sname=${encodeURIComponent('현재 위치')}&dlat=${lat}&dlng=${lng}&dname=${destinationName}&appname=com.nearpriceapp`;
+    },
+    webUrl: (lat, lng, name, currentLocation) => {
+      const destinationName = encodeURIComponent(name);
+      if (!currentLocation) {
+        return `https://map.naver.com/v5/directions/-/${lng},${lat},${destinationName}/-/walk`;
+      }
+      return `https://map.naver.com/v5/directions/${currentLocation.longitude},${currentLocation.latitude},${encodeURIComponent('현재 위치')}/${lng},${lat},${destinationName}/-/walk`;
+    },
+    canOpenUrls: ['nmap://'],
   },
   {
     name: '카카오맵',
-    appUrl: (lat, lng, name) =>
-      `kakaomap://look?p=${lat},${lng}&name=${encodeURIComponent(name)}`,
-    webUrl: (lat, lng) => `https://map.kakao.com/link/map/${lat},${lng}`,
-    scheme: 'kakaomap://',
+    appUrl: (lat, lng, name, currentLocation) => {
+      if (!currentLocation) {
+        return `kakaomap://look?p=${lat},${lng}&name=${encodeURIComponent(name)}`;
+      }
+      return `kakaomap://route?sp=${currentLocation.latitude},${currentLocation.longitude}&ep=${lat},${lng}&by=FOOT`;
+    },
+    webUrl: (lat, lng, name, currentLocation) => {
+      if (!currentLocation) {
+        return `https://map.kakao.com/link/map/${lat},${lng}`;
+      }
+      return `https://map.kakao.com/link/from/${encodeURIComponent('현재 위치')},${currentLocation.latitude},${currentLocation.longitude}/to/${encodeURIComponent(name)},${lat},${lng}`;
+    },
+    canOpenUrls: ['kakaomap://'],
   },
   {
     name: '구글맵',
-    appUrl: (lat, lng) => `google.navigation:q=${lat},${lng}`,
-    webUrl: (lat, lng) => `https://www.google.com/maps?q=${lat},${lng}`,
-    scheme: 'google.navigation://',
+    appUrl: (lat, lng) => {
+      if (Platform.OS === 'ios') {
+        return `comgooglemaps://?daddr=${lat},${lng}&directionsmode=walking`;
+      }
+      return `google.navigation:q=${lat},${lng}&mode=w`;
+    },
+    webUrl: (lat, lng, _name, currentLocation) => {
+      if (!currentLocation) {
+        return `https://www.google.com/maps?q=${lat},${lng}`;
+      }
+      return `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lat},${lng}&travelmode=walking`;
+    },
+    canOpenUrls: [
+      'google.navigation:q=37.5665,126.9780',
+      'geo:0,0?q=37.5665,126.9780',
+      'comgooglemaps://',
+    ],
   },
 ];
 
@@ -44,16 +122,23 @@ export async function openMapApp(
   name: string,
 ): Promise<void> {
   try {
+    const currentLocation = await resolveCurrentLocation();
     const availableApps: Array<{ name: string; url: string }> = [];
     for (const app of MAP_APPS) {
-      const supported = await Linking.canOpenURL(app.scheme);
+      const supportChecks = await Promise.all(
+        app.canOpenUrls.map((url) => Linking.canOpenURL(url)),
+      );
+      const supported = supportChecks.some(Boolean);
       if (supported) {
-        availableApps.push({ name: app.name, url: app.appUrl(lat, lng, name) });
+        availableApps.push({
+          name: app.name,
+          url: app.appUrl(lat, lng, name, currentLocation),
+        });
       }
     }
 
     if (availableApps.length === 0) {
-      await Linking.openURL(MAP_APPS[0].webUrl(lat, lng, name));
+      await Linking.openURL(MAP_APPS[0].webUrl(lat, lng, name, currentLocation));
       return;
     }
 
@@ -72,6 +157,6 @@ export async function openMapApp(
       { text: '취소', style: 'cancel' as const },
     ]);
   } catch {
-    Linking.openURL(MAP_APPS[0].webUrl(lat, lng, name)).catch(() => undefined);
+    Linking.openURL(MAP_APPS[0].webUrl(lat, lng, name, null)).catch(() => undefined);
   }
 }

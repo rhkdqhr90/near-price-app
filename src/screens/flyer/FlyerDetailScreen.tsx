@@ -26,6 +26,8 @@ import ShareIcon from '../../components/icons/ShareIcon';
 import MapPinIcon from '../../components/icons/MapPinIcon';
 import ThumbUpIcon from '../../components/icons/ThumbUpIcon';
 import { formatPrice } from '../../utils/format';
+import { naverLocalApi } from '../../api/naver-local.api';
+import { openMapApp } from '../../utils/openMapApp';
 
 type Props = FlyerScreenProps<'FlyerDetail'>;
 
@@ -124,8 +126,23 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleDirection = useCallback(async () => {
     if (!flyer?.storeAddress) return;
+    try {
+      const candidates = await naverLocalApi.searchAddress(flyer.storeAddress);
+      const first = candidates[0];
+      if (first) {
+        const latitude = parseFloat(first.y);
+        const longitude = parseFloat(first.x);
+        if (!isNaN(latitude) && !isNaN(longitude)) {
+          await openMapApp(latitude, longitude, flyer.storeName);
+          return;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+
     const query = encodeURIComponent(flyer.storeAddress);
-    const naverUrl = `nmap://search?query=${query}&appname=com.nearprice`;
+    const naverUrl = `nmap://search?query=${query}&appname=com.nearpriceapp`;
     const fallbackUrl = `https://map.naver.com/v5/search/${query}`;
     const supported = await Linking.canOpenURL(naverUrl);
     Linking.openURL(supported ? naverUrl : fallbackUrl).catch(() => {
@@ -158,7 +175,7 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [flyer?.products]);
 
   const ratingStars = flyer?.storeRating != null
-    ? '★'.repeat(Math.min(5, Math.round(flyer.storeRating)))
+    ? '★'.repeat(Math.max(0, Math.min(5, Math.round(flyer.storeRating))))
     : '';
 
   if (isLoading) {

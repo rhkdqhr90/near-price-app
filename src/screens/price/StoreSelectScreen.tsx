@@ -103,7 +103,7 @@ type SelectedStore =
 
 const NEARBY_RADIUS_M = 3000; // 주변 매장 기본 반경 3km
 const USER_RADIUS_M = 500;    // 지도 반경 원 표시용
-const SEARCH_RADIUS_M = USER_RADIUS_M;
+const SEARCH_RADIUS_M = NEARBY_RADIUS_M;
 
 const isWithinSearchRadius = (distanceM: number | null): boolean => {
   if (distanceM == null) return false;
@@ -127,23 +127,30 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
   const mapRef = useRef<NaverMapViewRef>(null);
 
   const isSearching = debouncedQuery.trim().length >= 2;
+  const searchOriginLatitude = gpsCoords?.latitude ?? null;
+  const searchOriginLongitude = gpsCoords?.longitude ?? null;
+  const hasSearchOrigin =
+    searchOriginLatitude !== null && searchOriginLongitude !== null;
 
   const storedRegionHint = useMemo(
     () => normalizeRegionHint(regionName),
     [regionName],
   );
-  const reverseTargetLat = gpsCoords?.latitude ?? regionLat ?? null;
-  const reverseTargetLng = gpsCoords?.longitude ?? regionLng ?? null;
-  const shouldResolveRegionHint =
-    storedRegionHint === null && reverseTargetLat !== null && reverseTargetLng !== null;
-  const { data: reverseRegionHint } = useReverseGeocode(
-    shouldResolveRegionHint ? reverseTargetLng : null,
-    shouldResolveRegionHint ? reverseTargetLat : null,
+  const reverseTargetLat = gpsCoords?.latitude ?? null;
+  const reverseTargetLng = gpsCoords?.longitude ?? null;
+  const shouldResolveGpsRegionHint =
+    reverseTargetLat !== null && reverseTargetLng !== null;
+  const { data: gpsRegionHint } = useReverseGeocode(
+    shouldResolveGpsRegionHint ? reverseTargetLng : null,
+    shouldResolveGpsRegionHint ? reverseTargetLat : null,
   );
   const effectiveRegionHint = useMemo(() => {
-    const fallbackRegionHint = normalizeRegionHint(reverseRegionHint);
-    return storedRegionHint ?? fallbackRegionHint ?? undefined;
-  }, [storedRegionHint, reverseRegionHint]);
+    const normalizedGpsRegionHint = normalizeRegionHint(gpsRegionHint);
+    if (gpsCoords) {
+      return normalizedGpsRegionHint ?? undefined;
+    }
+    return storedRegionHint ?? undefined;
+  }, [gpsCoords, gpsRegionHint, storedRegionHint]);
 
   // ─── 주변 매장 (쿼리 없을 때만 활성) ──────────────────────────────────────
   const {
@@ -161,13 +168,21 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
     data: naverPlaces,
     isFetching: isNaverSearching,
     isError: isNaverError,
-  } = useNaverPlaceSearch(debouncedQuery, isSearching, effectiveRegionHint);
+  } = useNaverPlaceSearch(
+    debouncedQuery,
+    isSearching && hasSearchOrigin,
+    effectiveRegionHint,
+  );
 
   // ─── DB 매장명 검색 (검색 중일 때) ────────────────────────────────────────
-  const { data: dbSearchStores } = useQuery({
+  const {
+    data: dbSearchStores,
+    isFetching: isDbSearching,
+    isError: isDbSearchError,
+  } = useQuery({
     queryKey: ['storeSearch', debouncedQuery],
     queryFn: () => storeApi.searchByName(debouncedQuery).then(r => r.data),
-    enabled: isSearching,
+    enabled: isSearching && hasSearchOrigin,
     staleTime: STALE_TIME.medium,
   });
 
@@ -193,7 +208,16 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
               zoom: 16,
             });
           },
-          () => {},
+          () => {
+            setGpsCoords(null);
+            if (initialRegionLat.current != null && initialRegionLng.current != null) {
+              mapRef.current?.animateCameraTo({
+                latitude: initialRegionLat.current,
+                longitude: initialRegionLng.current,
+                zoom: 15,
+              });
+            }
+          },
           { enableHighAccuracy: true, timeout: 20000, maximumAge: 0, forceRequestLocation: true },
         );
       }
@@ -228,7 +252,11 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
       const hasPermission = await requestPermission();
       if (!hasPermission) {
         if (fallbackLat != null && fallbackLng != null) {
-          setGpsCoords({ latitude: fallbackLat, longitude: fallbackLng });
+          mapRef.current?.animateCameraTo({
+            latitude: fallbackLat,
+            longitude: fallbackLng,
+            zoom: 15,
+          });
         }
         return;
       }
@@ -247,8 +275,8 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
           });
         },
         _error => {
+          setGpsCoords(null);
           if (fallbackLat != null && fallbackLng != null) {
-            setGpsCoords({ latitude: fallbackLat, longitude: fallbackLng });
             mapRef.current?.animateCameraTo({
               latitude: fallbackLat,
               longitude: fallbackLng,
@@ -297,8 +325,8 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   const listData = useMemo<ListItem[]>(() => {
     if (isSearching) {
-      const originLatitude = gpsCoords?.latitude ?? regionLat ?? null;
-      const originLongitude = gpsCoords?.longitude ?? regionLng ?? null;
+      const originLatitude = searchOriginLatitude;
+      const originLongitude = searchOriginLongitude;
 
       const dbMatches: DbListItem[] = (dbSearchStores ?? [])
         .map(s => {
@@ -360,9 +388,8 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
     dbSearchStores,
     naverPlaces,
     sortedNearby,
-    gpsCoords,
-    regionLat,
-    regionLng,
+    searchOriginLatitude,
+    searchOriginLongitude,
   ]);
 
   // ─── 지도 마커 ────────────────────────────────────────────────────────────
@@ -456,7 +483,27 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   // ─── GPS 버튼 (지도 현재 위치 recenter) ───────────────────────────────────
   const handleRecenter = useCallback(() => {
-    if (!gpsCoords) return;
+    if (!gpsCoords) {
+      Geolocation.getCurrentPosition(
+        pos => {
+          const coords: GpsCoords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          };
+          setGpsCoords(coords);
+          mapRef.current?.animateCameraTo({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            zoom: 16,
+          });
+        },
+        () => {
+          Alert.alert('현재 위치 확인 필요', 'GPS를 켜고 위치 권한을 허용한 뒤 다시 시도해 주세요.');
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0, forceRequestLocation: true },
+      );
+      return;
+    }
     mapRef.current?.animateCameraTo({
       latitude: gpsCoords.latitude,
       longitude: gpsCoords.longitude,
@@ -506,9 +553,12 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const isListLoading =
-    (!isSearching && isNearbyLoading) || (isSearching && isNaverSearching);
+    (!isSearching && isNearbyLoading) ||
+    (isSearching && hasSearchOrigin && (isNaverSearching || isDbSearching));
+  const isAwaitingGpsForSearch = isSearching && !hasSearchOrigin;
   const isListError =
-    (!isSearching && isNearbyError) || (isSearching && isNaverError);
+    (!isSearching && isNearbyError) ||
+    (isSearching && hasSearchOrigin && (isNaverError || isDbSearchError));
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -640,6 +690,10 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.listStatus}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
+      ) : isAwaitingGpsForSearch ? (
+        <View style={styles.listStatus}>
+          <Text style={styles.listStatusText}>현재 위치를 확인한 뒤 3km 반경으로 검색합니다.</Text>
+        </View>
       ) : isListError ? (
         <View style={styles.listStatus}>
           <Text style={styles.listStatusText}>매장을 불러오지 못했어요.</Text>
@@ -654,7 +708,7 @@ const StoreSelectScreen: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={
             <Text style={styles.emptyText}>
               {isSearching
-                ? '내 위치 기준 500m 내 검색 결과가 없어요. 아래 "새 매장 직접 등록" 을 이용해 주세요.'
+                ? '내 위치 기준 3km 내 검색 결과가 없어요. 아래 "새 매장 직접 등록" 을 이용해 주세요.'
                 : '주변에 등록된 매장이 없어요.'}
             </Text>
           }
