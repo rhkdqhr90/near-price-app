@@ -31,6 +31,9 @@ export type FlyerStackParamList = {
 
 export type MyPageStackParamList = {
   MyPage: undefined;
+  OwnerCenter: undefined;
+  OwnerApplicationForm: { mode: 'create' | 'edit' };
+  OwnerFlyerForm: { mode: 'create' } | { mode: 'edit'; flyerId: string };
   Badge: undefined;
   MyPriceList: undefined;
   LikedPrices: undefined;

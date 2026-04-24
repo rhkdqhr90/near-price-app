@@ -506,6 +506,7 @@ export interface FlyerResponse {
   products: FlyerProductItem[] | null;
   reviews: FlyerReviewItem[] | null;
   isActive: boolean;
+  ownerApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -521,6 +522,63 @@ export interface OwnerPostResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CreateFlyerDto {
+  storeName: string;
+  promotionTitle: string;
+  badge: string;
+  badgeColor: string;
+  dateRange: string;
+  highlight: string;
+  bgColor?: string;
+  emoji?: string;
+  warningText?: string;
+  ownerQuote?: string;
+  ownerName?: string;
+  ownerRole?: string;
+  storeAddress?: string;
+  storeRating?: number;
+  storeReviewCount?: number;
+  products?: FlyerProductItem[];
+  reviews?: FlyerReviewItem[];
+  isActive?: boolean;
+}
+
+export type UpdateFlyerDto = Partial<CreateFlyerDto>;
+
+// ─── Owner Application (사장 등록) ─────────────────────────────────────────
+
+export type OwnerApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface OwnerApplicationStore {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export interface OwnerApplicationResponse {
+  id: string;
+  store: OwnerApplicationStore;
+  ownerName: string;
+  ownerPhone: string;
+  businessRegistrationNumberMasked: string;
+  proofImageUrl: string;
+  status: OwnerApplicationStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOwnerApplicationDto {
+  storeId: string;
+  ownerName: string;
+  ownerPhone: string;
+  businessRegistrationNumber: string;
+  proofImageUrl: string;
+}
+
+export type UpdateOwnerApplicationDto = Partial<CreateOwnerApplicationDto>;
 
 // ─── PriceTag (가격표 시스템) ─────────────────────────────────────────────
 // API: src/price/entities/price.entity.ts 와 반드시 동기화

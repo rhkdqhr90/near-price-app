@@ -32,6 +32,7 @@ import LogOutIcon from '../../components/icons/LogOutIcon';
 import DocumentIcon from '../../components/icons/DocumentIcon';
 import HelpCircleIcon from '../../components/icons/HelpCircleIcon';
 import CheckIcon from '../../components/icons/CheckIcon';
+import StoreIcon from '../../components/icons/StoreIcon';
 import { APP_VERSION } from '../../utils/config';
 import { isAxiosError, isCancel } from '../../api/client';
 import { colors } from '../../theme/colors';
@@ -369,6 +370,10 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('Badge');
   }, [navigation]);
 
+  const handleNavigateOwnerCenter = useCallback(() => {
+    navigation.navigate('OwnerCenter');
+  }, [navigation]);
+
   const handleLocationChange = useCallback(() => {
     navigation.navigate('LocationSetup', { returnTo: 'mypage' });
   }, [navigation]);
@@ -652,6 +657,11 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.sectionOuter}>
           <Text style={styles.sectionKicker}>내 활동</Text>
           <View style={styles.sectionCard}>
+            <MenuItem
+              icon={<StoreIcon size={20} color={colors.primary} />}
+              label="사장님 센터"
+              onPress={handleNavigateOwnerCenter}
+            />
             <MenuItem
               icon={<TagIcon size={20} color={colors.primary} />}
               label="내가 등록한 가격"

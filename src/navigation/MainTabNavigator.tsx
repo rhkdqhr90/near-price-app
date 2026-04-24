@@ -45,6 +45,9 @@ import NotificationSettingsScreen from '../screens/mypage/NotificationSettingsSc
 import BadgeScreen from '../screens/mypage/BadgeScreen';
 import TermsScreen from '../screens/mypage/TermsScreen';
 import PrivacyPolicyScreen from '../screens/mypage/PrivacyPolicyScreen';
+import OwnerCenterScreen from '../screens/mypage/OwnerCenterScreen';
+import OwnerApplicationFormScreen from '../screens/mypage/OwnerApplicationFormScreen';
+import OwnerFlyerFormScreen from '../screens/mypage/OwnerFlyerFormScreen';
 import LocationSetupScreen from '../screens/auth/LocationSetupScreen';
 import HomeIconSvg from '../components/icons/HomeIcon';
 import HeartIconSvg from '../components/icons/HeartIcon';
@@ -161,6 +164,21 @@ const MyPageStackNavigator: React.FC = () => (
     <MyPageStack.Screen
       name="MyPage"
       component={MyPageScreen}
+      options={{ headerShown: false }}
+    />
+    <MyPageStack.Screen
+      name="OwnerCenter"
+      component={OwnerCenterScreen}
+      options={{ headerShown: false }}
+    />
+    <MyPageStack.Screen
+      name="OwnerApplicationForm"
+      component={OwnerApplicationFormScreen}
+      options={{ headerShown: false }}
+    />
+    <MyPageStack.Screen
+      name="OwnerFlyerForm"
+      component={OwnerFlyerFormScreen}
       options={{ headerShown: false }}
     />
     <MyPageStack.Screen

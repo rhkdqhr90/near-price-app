@@ -1,5 +1,10 @@
 import { apiClient } from './client';
-import type { FlyerResponse, OwnerPostResponse } from '../types/api.types';
+import type {
+  CreateFlyerDto,
+  FlyerResponse,
+  OwnerPostResponse,
+  UpdateFlyerDto,
+} from '../types/api.types';
 
 export const flyerApi = {
   getAll: () =>
@@ -10,4 +15,16 @@ export const flyerApi = {
 
   getOwnerPosts: () =>
     apiClient.get<OwnerPostResponse[]>('/flyer/owner-posts/list'),
+
+  getMyFlyers: () =>
+    apiClient.get<FlyerResponse[]>('/flyer/my'),
+
+  createMyFlyer: (dto: CreateFlyerDto) =>
+    apiClient.post<FlyerResponse>('/flyer/my', dto),
+
+  updateMyFlyer: (flyerId: string, dto: UpdateFlyerDto) =>
+    apiClient.patch<FlyerResponse>(`/flyer/my/${flyerId}`, dto),
+
+  deleteMyFlyer: (flyerId: string) =>
+    apiClient.delete<void>(`/flyer/my/${flyerId}`),
 };
