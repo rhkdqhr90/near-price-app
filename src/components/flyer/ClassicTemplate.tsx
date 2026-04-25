@@ -12,7 +12,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import type { FlyerResponse, FlyerProductItem, FlyerReviewItem } from '../../types/api.types';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
 import MapPinIcon from '../icons/MapPinIcon';
 import ThumbUpIcon from '../icons/ThumbUpIcon';
 import { formatPrice } from '../../utils/format';

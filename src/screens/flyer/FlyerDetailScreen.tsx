@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,8 @@ import ClassicTemplate from '../../components/flyer/ClassicTemplate';
 import RetroTemplate from '../../components/flyer/RetroTemplate';
 import NewsTemplate from '../../components/flyer/NewsTemplate';
 import CouponTemplate from '../../components/flyer/CouponTemplate';
+import ProductDetailModal from '../../components/flyer/ProductDetailModal';
+import type { FlyerProductItem } from '../../types/api.types';
 
 type Props = FlyerScreenProps<'FlyerDetail'>;
 
@@ -79,6 +81,14 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [flyer]);
 
+  const [selectedProduct, setSelectedProduct] = useState<FlyerProductItem | null>(null);
+  const handleProductPress = useCallback((product: FlyerProductItem) => {
+    setSelectedProduct(product);
+  }, []);
+  const handleModalClose = useCallback(() => {
+    setSelectedProduct(null);
+  }, []);
+
   const scrollContentStyle = useMemo(
     () => ({ paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl }),
     [insets.bottom],
@@ -127,6 +137,7 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             flyer={flyer}
             onDirection={handleDirection}
             onCommunityShare={handleCommunityShare}
+            onProductPress={handleProductPress}
           />
         )}
         {templateType === 'news' && (
@@ -134,6 +145,7 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             flyer={flyer}
             onDirection={handleDirection}
             onCommunityShare={handleCommunityShare}
+            onProductPress={handleProductPress}
           />
         )}
         {templateType === 'coupon' && (
@@ -141,6 +153,7 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             flyer={flyer}
             onDirection={handleDirection}
             onCommunityShare={handleCommunityShare}
+            onProductPress={handleProductPress}
           />
         )}
         {templateType === 'classic' && (
@@ -148,9 +161,12 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             flyer={flyer}
             onDirection={handleDirection}
             onCommunityShare={handleCommunityShare}
+            onProductPress={handleProductPress}
           />
         )}
       </ScrollView>
+
+      <ProductDetailModal product={selectedProduct} onClose={handleModalClose} />
     </View>
   );
 };

@@ -40,6 +40,7 @@ const ProductDetailModal: React.FC<Props> = ({ product, onClose }) => {
 
   // product가 바뀌면 imageError 초기화
   const imageUri = product?.imageUrl ?? null;
+  const badges = product?.badges ?? [];
 
   const savePct =
     product?.originalPrice && product.originalPrice > 0
@@ -86,9 +87,9 @@ const ProductDetailModal: React.FC<Props> = ({ product, onClose }) => {
           </View>
 
           {/* 뱃지 */}
-          {(product?.badges ?? []).length > 0 && (
+          {badges.length > 0 && (
             <View style={styles.badgeRow}>
-              {product!.badges.map((badge) => (
+              {badges.map((badge) => (
                 <View
                   key={badge.label}
                   style={[styles.badge, { backgroundColor: BADGE_BG[badge.type] }]}

@@ -1,11 +1,109 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import type { FlyerProductItem } from '../../types/api.types';
 import type { FlyerTemplateProps } from './ClassicTemplate';
 
-const CouponTemplate: React.FC<FlyerTemplateProps> = ({ flyer }) => {
+// ─── CouponRow ────────────────────────────────────────────────────────────────
+
+interface CouponRowProps {
+  product: FlyerProductItem;
+  pct: number | null;
+  onPress: (product: FlyerProductItem) => void;
+}
+
+const CouponRow: React.FC<CouponRowProps> = ({ product, pct, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const handlePress = useCallback(() => onPress(product), [onPress, product]);
+  const handleImageError = useCallback(() => setImageError(true), []);
+
+  return (
+    <TouchableOpacity
+      style={styles.coupon}
+      onPress={handlePress}
+      activeOpacity={0.88}
+      accessibilityRole="button"
+      accessibilityLabel={`${product.name} 상세보기`}
+    >
+      {/* 왼쪽: 상품 정보 */}
+      <View style={styles.couponLeft}>
+        {product.badges[0] ? (
+          <View style={styles.couponBadge}>
+            <Text style={styles.couponBadgeText}>{product.badges[0].label}</Text>
+          </View>
+        ) : null}
+        <View style={styles.couponNameRow}>
+          {/* 이미지 or 이모지 */}
+          <View style={styles.couponImageBox}>
+            {product.imageUrl && !imageError ? (
+              <Image
+                source={{ uri: product.imageUrl }}
+                style={styles.couponImage}
+                resizeMode="cover"
+                onError={handleImageError}
+              />
+            ) : (
+              <Text style={styles.couponEmoji}>{product.emoji}</Text>
+            )}
+          </View>
+          <Text style={styles.couponName} numberOfLines={2}>{product.name}</Text>
+        </View>
+        <View style={styles.couponPriceRow}>
+          {product.originalPrice !== null && (
+            <Text style={styles.couponOriginal}>
+              {product.originalPrice.toLocaleString('ko-KR')}원
+            </Text>
+          )}
+          <Text style={styles.couponPrice}>{product.salePrice.toLocaleString('ko-KR')}</Text>
+          <Text style={styles.couponPriceUnit}>원</Text>
+        </View>
+        {/* 바코드 장식 */}
+        <View style={styles.barcodeRow}>
+          {BARCODE_WIDTHS.map((w, i) => (
+            <View key={i} style={[styles.barcodeLine, { width: w }]} />
+          ))}
+        </View>
+      </View>
+
+      {/* 중앙: 점선 구분자 */}
+      <View style={styles.perforation}>
+        <View style={styles.perforationNotchTop} />
+        <View style={styles.perforationLine} />
+        <View style={styles.perforationNotchBottom} />
+      </View>
+
+      {/* 오른쪽: 쿠폰 스텁 */}
+      <View style={styles.couponStub}>
+        <Text style={styles.stubLabel}>COUPON</Text>
+        {pct !== null ? (
+          <>
+            <View style={styles.stubPctRow}>
+              <Text style={styles.stubMinus}>-</Text>
+              <Text style={styles.stubPct}>{pct}</Text>
+            </View>
+            <Text style={styles.stubPctSign}>%</Text>
+          </>
+        ) : (
+          <Text style={styles.stubSpecial}>특가</Text>
+        )}
+        {product.imageUrl && !imageError ? (
+          <Image
+            source={{ uri: product.imageUrl }}
+            style={styles.stubImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={styles.stubEmoji}>{product.emoji}</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ─── CouponTemplate ───────────────────────────────────────────────────────────
+
+const CouponTemplate: React.FC<FlyerTemplateProps> = ({ flyer, onProductPress }) => {
   const products = flyer.products ?? [];
 
   const maxPct = products.reduce((max, p) => {
@@ -40,11 +138,18 @@ const CouponTemplate: React.FC<FlyerTemplateProps> = ({ flyer }) => {
       </View>
 
       {/* 쿠폰 리스트 */}
-      {products.map((product, i) => {
+      {products.map((product) => {
         const pct = product.originalPrice
           ? Math.round((1 - product.salePrice / product.originalPrice) * 100)
           : null;
-        return <CouponRow key={product.id} product={product} pct={pct} index={i} />;
+        return (
+          <CouponRow
+            key={product.id}
+            product={product}
+            pct={pct}
+            onPress={onProductPress}
+          />
+        );
       })}
 
       {/* 주의사항 */}
@@ -56,68 +161,6 @@ const CouponTemplate: React.FC<FlyerTemplateProps> = ({ flyer }) => {
     </View>
   );
 };
-
-interface CouponRowProps {
-  product: FlyerProductItem;
-  pct: number | null;
-  index: number;
-}
-
-const CouponRow: React.FC<CouponRowProps> = ({ product, pct }) => (
-  <View style={styles.coupon}>
-    {/* 왼쪽: 상품 정보 */}
-    <View style={styles.couponLeft}>
-      {product.badges[0] ? (
-        <View style={styles.couponBadge}>
-          <Text style={styles.couponBadgeText}>{product.badges[0].label}</Text>
-        </View>
-      ) : null}
-      <View style={styles.couponNameRow}>
-        <Text style={styles.couponEmoji}>{product.emoji}</Text>
-        <Text style={styles.couponName} numberOfLines={2}>{product.name}</Text>
-      </View>
-      <View style={styles.couponPriceRow}>
-        {product.originalPrice !== null && (
-          <Text style={styles.couponOriginal}>
-            {product.originalPrice.toLocaleString('ko-KR')}원
-          </Text>
-        )}
-        <Text style={styles.couponPrice}>{product.salePrice.toLocaleString('ko-KR')}</Text>
-        <Text style={styles.couponPriceUnit}>원</Text>
-      </View>
-      {/* 바코드 장식 */}
-      <View style={styles.barcodeRow}>
-        {BARCODE_WIDTHS.map((w, i) => (
-          <View key={i} style={[styles.barcodeLine, { width: w }]} />
-        ))}
-      </View>
-    </View>
-
-    {/* 중앙: 점선 구분자 */}
-    <View style={styles.perforation}>
-      <View style={styles.perforationNotchTop} />
-      <View style={styles.perforationLine} />
-      <View style={styles.perforationNotchBottom} />
-    </View>
-
-    {/* 오른쪽: 쿠폰 스텁 */}
-    <View style={styles.couponStub}>
-      <Text style={styles.stubLabel}>COUPON</Text>
-      {pct !== null ? (
-        <>
-          <View style={styles.stubPctRow}>
-            <Text style={styles.stubMinus}>-</Text>
-            <Text style={styles.stubPct}>{pct}</Text>
-          </View>
-          <Text style={styles.stubPctSign}>%</Text>
-        </>
-      ) : (
-        <Text style={styles.stubSpecial}>특가</Text>
-      )}
-      <Text style={styles.stubEmoji}>{product.emoji}</Text>
-    </View>
-  </View>
-);
 
 // 바코드 패턴 (고정값 — 렌더마다 계산 불필요)
 const BARCODE_WIDTHS = [1.5, 3, 1.5, 1.5, 3, 1.5, 3, 1.5, 1.5, 3, 1.5, 1.5, 3, 3, 1.5, 1.5, 3, 1.5, 3, 1.5];
@@ -213,6 +256,17 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.xs,
   },
+  couponImageBox: {
+    width: 36,
+    height: 36,
+    borderRadius: spacing.radiusSm,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray100,
+    flexShrink: 0,
+  },
+  couponImage: { width: '100%', height: '100%' },
   couponEmoji: { fontSize: 20 },
   couponName: {
     flex: 1,
@@ -332,6 +386,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     letterSpacing: -0.5,
   },
+  stubImage: { width: 28, height: 28, borderRadius: 4, marginTop: spacing.xs },
   stubEmoji: { fontSize: 20, marginTop: spacing.xs },
 
   // 주의사항

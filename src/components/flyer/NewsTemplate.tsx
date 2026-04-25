@@ -1,10 +1,144 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
+import type { FlyerProductItem } from '../../types/api.types';
 import type { FlyerTemplateProps } from './ClassicTemplate';
 
-const NewsTemplate: React.FC<FlyerTemplateProps> = ({ flyer, onDirection }) => {
+// ─── TopStory ────────────────────────────────────────────────────────────────
+
+interface TopStoryProps {
+  hero: FlyerProductItem;
+  savePct: number | null;
+  storeName: string;
+  dateRange: string;
+  highlight: string | null | undefined;
+  onPress: (product: FlyerProductItem) => void;
+}
+
+const TopStory: React.FC<TopStoryProps> = ({ hero, savePct, storeName, dateRange, highlight, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const handlePress = useCallback(() => onPress(hero), [onPress, hero]);
+  const handleImageError = useCallback(() => setImageError(true), []);
+
+  return (
+    <TouchableOpacity
+      style={styles.topStory}
+      onPress={handlePress}
+      activeOpacity={0.88}
+      accessibilityRole="button"
+      accessibilityLabel={`${hero.name} 상세보기`}
+    >
+      <Text style={styles.topStoryLabel}>── TOP STORY ──</Text>
+      <Text style={styles.topStoryHeadline}>
+        {`"${hero.name},\n${savePct !== null ? `전주 대비 ${savePct}% 파격 인하"` : '이번 주 특가 행사"'}`}
+      </Text>
+      <View style={styles.topStoryBodyRow}>
+        <View style={styles.topStoryImageBox}>
+          {hero.imageUrl && !imageError ? (
+            <Image
+              source={{ uri: hero.imageUrl }}
+              style={styles.topStoryImage}
+              resizeMode="cover"
+              onError={handleImageError}
+            />
+          ) : (
+            <Text style={styles.topStoryEmoji}>{hero.emoji}</Text>
+          )}
+        </View>
+        <View style={styles.topStoryText}>
+          <Text style={styles.topStoryDropCap}>{storeName.charAt(0)}</Text>
+          <Text style={styles.topStoryBody}>
+            {storeName}이(가) {dateRange} 기간 동안 주요 상품을
+            {savePct !== null ? ` 최대 ${savePct}%까지 ` : ' '}할인한다.
+            {highlight ? ` "${highlight}"` : ''}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.topStoryPrice}>
+        {hero.originalPrice !== null && (
+          <Text style={styles.topStoryOriginal}>
+            정가 {hero.originalPrice.toLocaleString('ko-KR')}원
+          </Text>
+        )}
+        <View style={styles.topStoryPriceRow}>
+          <Text style={styles.topStoryPriceNum}>{hero.salePrice.toLocaleString('ko-KR')}</Text>
+          <Text style={styles.topStoryPriceUnit}>원</Text>
+          {savePct !== null && (
+            <View style={styles.topStoryPctBadge}>
+              <Text style={styles.topStoryPctText}>▼{savePct}%</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ─── ColumnItem ───────────────────────────────────────────────────────────────
+
+interface ColumnItemProps {
+  product: FlyerProductItem;
+  index: number;
+  onPress: (product: FlyerProductItem) => void;
+}
+
+const ColumnItem: React.FC<ColumnItemProps> = ({ product, index, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const handlePress = useCallback(() => onPress(product), [onPress, product]);
+  const handleImageError = useCallback(() => setImageError(true), []);
+
+  const pct = product.originalPrice
+    ? Math.round((1 - product.salePrice / product.originalPrice) * 100)
+    : null;
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.columnItem,
+        index > 1 && styles.columnItemTopBorder,
+        index % 2 === 1 && styles.columnItemLeftBorder,
+      ]}
+      onPress={handlePress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${product.name} 상세보기`}
+    >
+      <Text style={styles.columnNum}>── ITEM NO.{String(index + 1).padStart(2, '0')}</Text>
+      <View style={styles.columnNameRow}>
+        <View style={styles.columnImageBox}>
+          {product.imageUrl && !imageError ? (
+            <Image
+              source={{ uri: product.imageUrl }}
+              style={styles.columnImage}
+              resizeMode="cover"
+              onError={handleImageError}
+            />
+          ) : (
+            <Text style={styles.columnEmoji}>{product.emoji}</Text>
+          )}
+        </View>
+        <Text style={styles.columnName} numberOfLines={2}>{product.name}</Text>
+      </View>
+      <View style={styles.columnPriceRow}>
+        <Text style={styles.columnPrice}>{product.salePrice.toLocaleString('ko-KR')}</Text>
+        <Text style={styles.columnPriceUnit}>원</Text>
+      </View>
+      {pct !== null && (
+        <Text style={styles.columnDiscount}>
+          ▼{pct}%
+          {product.originalPrice !== null
+            ? ` (정가 ${product.originalPrice.toLocaleString('ko-KR')})`
+            : ''}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+// ─── NewsTemplate ─────────────────────────────────────────────────────────────
+
+const NewsTemplate: React.FC<FlyerTemplateProps> = ({ flyer, onDirection, onProductPress }) => {
   const products = flyer.products ?? [];
   const hero = products[0] ?? null;
 
@@ -34,78 +168,26 @@ const NewsTemplate: React.FC<FlyerTemplateProps> = ({ flyer, onDirection }) => {
 
       {/* Top Story */}
       {hero ? (
-        <View style={styles.topStory}>
-          <Text style={styles.topStoryLabel}>── TOP STORY ──</Text>
-          <Text style={styles.topStoryHeadline}>
-            {`"${hero.name},\n${heroSavePct !== null ? `전주 대비 ${heroSavePct}% 파격 인하"` : '이번 주 특가 행사"'}`}
-          </Text>
-          <View style={styles.topStoryBodyRow}>
-            <View style={styles.topStoryEmojiBox}>
-              <Text style={styles.topStoryEmoji}>{hero.emoji}</Text>
-            </View>
-            <View style={styles.topStoryText}>
-              <Text style={styles.topStoryDropCap}>{flyer.storeName.charAt(0)}</Text>
-              <Text style={styles.topStoryBody}>
-                {flyer.storeName}이(가) {flyer.dateRange} 기간 동안 주요 상품을
-                {heroSavePct !== null ? ` 최대 ${heroSavePct}%까지 ` : ' '}할인한다.
-                {flyer.highlight ? ` "${flyer.highlight}"` : ''}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.topStoryPrice}>
-            {hero.originalPrice !== null && (
-              <Text style={styles.topStoryOriginal}>
-                정가 {hero.originalPrice.toLocaleString('ko-KR')}원
-              </Text>
-            )}
-            <View style={styles.topStoryPriceRow}>
-              <Text style={styles.topStoryPriceNum}>{hero.salePrice.toLocaleString('ko-KR')}</Text>
-              <Text style={styles.topStoryPriceUnit}>원</Text>
-              {heroSavePct !== null && (
-                <View style={styles.topStoryPctBadge}>
-                  <Text style={styles.topStoryPctText}>▼{heroSavePct}%</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
+        <TopStory
+          hero={hero}
+          savePct={heroSavePct}
+          storeName={flyer.storeName}
+          dateRange={flyer.dateRange}
+          highlight={flyer.highlight}
+          onPress={onProductPress}
+        />
       ) : null}
 
       {/* 상품 컬럼 */}
       <View style={styles.columns}>
-        {products.map((product, i) => {
-          const pct = product.originalPrice
-            ? Math.round((1 - product.salePrice / product.originalPrice) * 100)
-            : null;
-          return (
-            <View
-              key={product.id}
-              style={[
-                styles.columnItem,
-                i > 1 && styles.columnItemTopBorder,
-                i % 2 === 1 && styles.columnItemLeftBorder,
-              ]}
-            >
-              <Text style={styles.columnNum}>── ITEM NO.{String(i + 1).padStart(2, '0')}</Text>
-              <View style={styles.columnNameRow}>
-                <Text style={styles.columnEmoji}>{product.emoji}</Text>
-                <Text style={styles.columnName} numberOfLines={2}>{product.name}</Text>
-              </View>
-              <View style={styles.columnPriceRow}>
-                <Text style={styles.columnPrice}>{product.salePrice.toLocaleString('ko-KR')}</Text>
-                <Text style={styles.columnPriceUnit}>원</Text>
-              </View>
-              {pct !== null && (
-                <Text style={styles.columnDiscount}>
-                  ▼{pct}%
-                  {product.originalPrice !== null
-                    ? ` (정가 ${product.originalPrice.toLocaleString('ko-KR')})`
-                    : ''}
-                </Text>
-              )}
-            </View>
-          );
-        })}
+        {products.map((product, i) => (
+          <ColumnItem
+            key={product.id}
+            product={product}
+            index={i}
+            onPress={onProductPress}
+          />
+        ))}
       </View>
 
       {/* 사장님 한마디 광고 블록 */}
@@ -234,7 +316,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  topStoryEmojiBox: {
+  topStoryImageBox: {
     width: 64,
     height: 64,
     backgroundColor: colors.white,
@@ -243,7 +325,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
   },
+  topStoryImage: { width: '100%', height: '100%' },
   topStoryEmoji: { fontSize: 36 },
   topStoryText: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
   topStoryDropCap: {
@@ -326,6 +410,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   columnNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, marginBottom: spacing.xs },
+  columnImageBox: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: 2,
+    flexShrink: 0,
+  },
+  columnImage: { width: '100%', height: '100%' },
   columnEmoji: { fontSize: 18 },
   columnName: {
     flex: 1,
