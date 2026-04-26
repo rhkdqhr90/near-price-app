@@ -41,7 +41,7 @@ const RootNavigator: React.FC = () => {
       }
     };
 
-    void restore();
+    restore().catch(() => undefined);
 
     return () => {
       cancelled = true;
@@ -70,7 +70,7 @@ const RootNavigator: React.FC = () => {
       }
     };
 
-    void syncCurrentUser();
+    syncCurrentUser().catch(() => undefined);
 
     return () => {
       cancelled = true;

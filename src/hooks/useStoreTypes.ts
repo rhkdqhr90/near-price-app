@@ -49,14 +49,14 @@ export const useStoreTypes = () => {
           setStoreTypes(DEFAULT_STORE_TYPES);
         }
       } catch {
-        void storage.remove(STORAGE_KEYS.CUSTOM_STORE_TYPES).catch(() => {});
+        storage.remove(STORAGE_KEYS.CUSTOM_STORE_TYPES).catch(() => undefined);
         setStoreTypes(DEFAULT_STORE_TYPES);
       } finally {
         setIsLoading(false);
       }
     };
 
-    void loadStoreTypes();
+    loadStoreTypes().catch(() => undefined);
   }, []);
 
   // 새 카테고리 추가

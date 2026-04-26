@@ -28,7 +28,9 @@ export const useAddStoreReview = (storeId: string) => {
   return useMutation<StoreReviewResponse, Error, CreateStoreReviewDto>({
     mutationFn: (dto) => storeApi.addReview(storeId, dto).then((res) => res.data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: storeKeys.reviews(storeId) });
+      queryClient
+        .invalidateQueries({ queryKey: storeKeys.reviews(storeId) })
+        .catch(() => undefined);
     },
   });
 };

@@ -62,7 +62,9 @@ const StoreHistorySheet: React.FC<StoreHistorySheetProps> = ({
 
   const handleDirections = () => {
     if (!canNavigate) return;
-    void openMapApp(storeLat as number, storeLng as number, storeName as string);
+    openMapApp(storeLat as number, storeLng as number, storeName as string).catch(
+      () => undefined,
+    );
   };
 
   const rows = useMemo(() => {

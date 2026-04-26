@@ -22,15 +22,18 @@ const rate = (item: FlyerProductItem): number | null => {
   return Math.max(0, Math.round((1 - item.salePrice / item.originalPrice) * 100));
 };
 
-const RisoVisual: React.FC<{ item: FlyerProductItem; size: number }> = ({ item, size }) => {
+type VisualSize = 'hero' | 'grid';
+
+const RisoVisual: React.FC<{ item: FlyerProductItem; size: VisualSize }> = ({ item, size }) => {
   const [errored, setErrored] = useState(false);
   const uri = fixImageUrl(item.imageUrl);
+  const sizeStyle = size === 'hero' ? styles.visualHero : styles.visualGrid;
 
   if (uri && !errored) {
     return (
       <Image
         source={{ uri }}
-        style={{ width: size, height: size, borderRadius: 2 }}
+        style={[styles.visualImage, sizeStyle]}
         resizeMode="cover"
         onError={() => setErrored(true)}
       />
@@ -38,9 +41,7 @@ const RisoVisual: React.FC<{ item: FlyerProductItem; size: number }> = ({ item, 
   }
 
   return (
-    <View
-      style={[styles.visualFallback, { width: size, height: size }]}
-    >
+    <View style={[styles.visualFallback, sizeStyle]}>
       <Text style={styles.visualEmoji}>{item.emoji || '🛒'}</Text>
     </View>
   );
@@ -83,7 +84,7 @@ const RisoFlyerTemplate: React.FC<Props> = ({ flyer, onProductPress }) => {
             accessibilityLabel={`${hero.name} 상세보기`}
           >
             <View style={styles.heroImageWrap}>
-              <RisoVisual item={hero} size={108} />
+              <RisoVisual item={hero} size="hero" />
             </View>
             <View style={styles.heroTextWrap}>
               <Text style={styles.heroTag}>BEST PICK</Text>
@@ -113,7 +114,7 @@ const RisoFlyerTemplate: React.FC<Props> = ({ flyer, onProductPress }) => {
                 accessibilityRole="button"
                 accessibilityLabel={`${item.name} 상세보기`}
               >
-                <RisoVisual item={item} size={72} />
+                <RisoVisual item={item} size="grid" />
                 <Text style={styles.gridName} numberOfLines={2}>{item.name}</Text>
                 <Text style={styles.gridPrice}>{formatPrice(item.salePrice)}</Text>
                 {rate(item) !== null && (
@@ -225,6 +226,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1818',
     backgroundColor: '#0EA5C7',
+  },
+  visualImage: {
+    borderRadius: spacing.micro,
+  },
+  visualHero: {
+    width: 108,
+    height: 108,
+  },
+  visualGrid: {
+    width: 72,
+    height: 72,
   },
   heroTextWrap: {
     flex: 1,

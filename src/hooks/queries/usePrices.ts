@@ -107,8 +107,12 @@ export const useDeleteMyPrice = () => {
   return useMutation<void, Error, string>({
     mutationFn: (priceId: string) => priceApi.remove(priceId).then(() => undefined),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: priceKeys.mine });
-      void queryClient.invalidateQueries({ queryKey: wishlistKeys.mine });
+      queryClient
+        .invalidateQueries({ queryKey: priceKeys.mine })
+        .catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: wishlistKeys.mine })
+        .catch(() => undefined);
     },
   });
 };
