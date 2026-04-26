@@ -66,6 +66,24 @@ npm run android
 # 또는 Android Studio에서 직접 빌드
 ```
 
+### Android 물리기기 로컬 QA(권장)
+```bash
+# 1) API 서버 (별도 터미널, near-price-api)
+cd ../near-price-api
+npm run start:dev:local
+
+# 2) 앱 빌드 + 설치 + 포트 리버스 (near-price-app)
+cd ../near-price-app
+npm run android:local:debug:rebuild
+```
+
+`adb reverse`는 USB 재연결/기기 재부팅/adb 재시작 시 풀릴 수 있습니다.
+API 연결이 끊기면 아래 명령을 다시 실행하세요.
+
+```bash
+npm run adb:reverse
+```
+
 ### iOS 빌드 및 실행
 ```bash
 npm run ios
@@ -255,6 +273,17 @@ cd ..
 
 ### Android 에뮬레이터 네트워크
 백엔드 API Base URL을 `10.0.2.2:3000` (에뮬레이터에서 호스트 localhost)로 설정.
+
+### Android 물리기기에서 API가 안 붙는 경우
+아래 순서로 확인:
+
+```bash
+# 1) API 정상 확인 (near-price-api)
+curl http://127.0.0.1:3000/health
+
+# 2) 포트 리버스 재설정 (near-price-app)
+npm run adb:reverse
+```
 
 ## 참고 자료
 

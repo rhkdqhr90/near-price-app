@@ -48,6 +48,10 @@ export interface UpdateNicknameDto {
   nickname: string;
 }
 
+export interface UpdateUserDto {
+  profileImageUrl?: string | null;
+}
+
 // UserResponse에서 파생하여 필드 추가 시 자동 동기화
 export type UpdateNotificationSettingsDto = Partial<Pick<UserResponse, 'notifPriceChange' | 'notifPromotion'>>;
 
@@ -504,6 +508,7 @@ export interface FlyerResponse {
   ownerName: string | null;
   ownerRole: string | null;
   storeAddress: string | null;
+  storeId: string | null;
   storeRating: number | null;
   storeReviewCount: number | null;
   products: FlyerProductItem[] | null;

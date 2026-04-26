@@ -11,10 +11,17 @@ export const fixImageUrl = (url: string | null | undefined): string | null => {
   if (!url.startsWith('http')) {
     return `${API_BASE_URL}/${url.replace(/^\//, '')}`;
   }
-  return url.replace(
+  const normalized = url.replace(
     /https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+):\d+/g,
     API_BASE_URL,
   );
+
+  // Android cleartext 정책으로 외부 http 이미지는 로드 실패할 수 있어 https로 승격
+  if (normalized.startsWith('http://') && !normalized.startsWith(API_BASE_URL)) {
+    return normalized.replace('http://', 'https://');
+  }
+
+  return normalized;
 };
 
 export const formatPrice = (price: number | null | undefined): string => {

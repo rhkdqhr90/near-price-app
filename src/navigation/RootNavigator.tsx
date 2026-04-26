@@ -10,12 +10,15 @@ import MainTabNavigator from './MainTabNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import { colors } from '../theme/colors';
+import { userApi } from '../api/user.api';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RESTORE_TIMEOUT_MS = 4000;
 
 const RootNavigator: React.FC = () => {
-  const { isAuthenticated, restoreAuth } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const restoreAuth = useAuthStore((s) => s.restoreAuth);
+  const setUser = useAuthStore((s) => s.setUser);
   const { latitude, longitude, restoreLocation } = useLocationStore();
   const { hasSeenOnboarding, restoreOnboarding } = useOnboardingStore();
   const [isRestoring, setIsRestoring] = useState(true);
@@ -44,6 +47,35 @@ const RootNavigator: React.FC = () => {
       cancelled = true;
     };
   }, [restoreAuth, restoreLocation, restoreOnboarding]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let cancelled = false;
+
+    const syncCurrentUser = async () => {
+      try {
+        const me = await userApi.getCurrentUser();
+        if (cancelled) return;
+
+        setUser({
+          id: me.id,
+          email: me.email,
+          nickname: me.nickname,
+          profileImageUrl: me.profileImageUrl,
+          trustScore: me.trustScore,
+        });
+      } catch {
+        // 프로필 동기화 실패는 치명적 오류가 아니므로 무시
+      }
+    };
+
+    void syncCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, setUser]);
 
   if (isRestoring) {
     return <View style={styles.splash} />;

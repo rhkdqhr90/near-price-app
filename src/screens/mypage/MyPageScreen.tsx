@@ -12,6 +12,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MyPageScreenProps, MainTabParamList } from '../../navigation/types';
@@ -39,6 +40,8 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { userApi } from '../../api/user.api';
+import { uploadApi } from '../../api/upload.api';
+import { fixImageUrl } from '../../utils/format';
 
 type Props = MyPageScreenProps<'MyPage'>;
 
@@ -52,6 +55,48 @@ interface NicknameModalProps {
 }
 
 const NICKNAME_REGEX = /^[가-힣a-zA-Z0-9]{2,6}$/;
+
+const inferMimeTypeFromPath = (path: string): string => {
+  const normalized = path.toLowerCase();
+  if (normalized.endsWith('.png')) return 'image/png';
+  if (normalized.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
+};
+
+const normalizeMimeType = (mimeType: string): string => {
+  if (mimeType.toLowerCase() === 'image/jpg') return 'image/jpeg';
+  return mimeType.toLowerCase();
+};
+
+const fileExtensionFromMimeType = (mimeType: string): string => {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'jpg';
+};
+
+const toProfileUploadMeta = (
+  asset: Asset | undefined,
+): { uri: string; fileName: string; mimeType: string; fileSize?: number } | null => {
+  if (!asset?.uri) return null;
+
+  const mimeType = normalizeMimeType(
+    (asset.type && asset.type.startsWith('image/'))
+      ? asset.type
+      : inferMimeTypeFromPath(asset.fileName ?? asset.uri),
+  );
+
+  const hasImageExtension = (asset.fileName ?? '').includes('.');
+  const fileName = hasImageExtension
+    ? (asset.fileName as string)
+    : `profile_${Date.now()}.${fileExtensionFromMimeType(mimeType)}`;
+
+  return {
+    uri: asset.uri,
+    fileName,
+    mimeType,
+    fileSize: asset.fileSize,
+  };
+};
 
 const getNicknameError = (nickname: string): string | null => {
   // 공백만으로 이루어진 경우 거부
@@ -299,12 +344,17 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
   } = useMyPointSummary();
 
   const [nicknameModalVisible, setNicknameModalVisible] = useState(false);
+  const [isProfileImageUploading, setIsProfileImageUploading] = useState(false);
 
   // 닉네임이 없거나 빈 문자열인 경우 폴백 처리
   const displayNickname = user?.nickname && user.nickname.trim().length > 0
     ? user.nickname
     : (user?.email?.split('@')[0] ?? '익명');
   const initials = displayNickname?.charAt(0)?.toUpperCase() ?? '?';
+  const profileImageUri = useMemo(
+    () => fixImageUrl(user?.profileImageUrl),
+    [user?.profileImageUrl],
+  );
 
   const scrollContentStyle = useMemo(
     () => ({ paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl }),
@@ -438,6 +488,91 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
     setNicknameModalVisible(true);
   }, []);
 
+  const handleProfileImageEdit = useCallback(async () => {
+    if (!user || isProfileImageUploading) return;
+
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        quality: 0.9,
+      });
+
+      if (result.didCancel) return;
+
+      const uploadMeta = toProfileUploadMeta(result.assets?.[0]);
+      if (!uploadMeta) {
+        Alert.alert('오류', '이미지를 선택하지 못했습니다.');
+        return;
+      }
+
+      setIsProfileImageUploading(true);
+
+      const uploadResponse = await uploadApi.uploadImage(
+        uploadMeta.uri,
+        uploadMeta.fileName,
+        uploadMeta.mimeType,
+        uploadMeta.fileSize,
+      );
+
+      const uploadedUrl = uploadResponse.data?.url;
+      if (!uploadedUrl) {
+        throw new Error('업로드된 이미지 URL을 받지 못했습니다.');
+      }
+
+      const updatedUser = await userApi.updateUser(user.id, {
+        profileImageUrl: uploadedUrl,
+      });
+
+      setUser({
+        ...user,
+        profileImageUrl: updatedUser.profileImageUrl,
+      });
+
+      Alert.alert('완료', '프로필 사진이 변경되었습니다.');
+    } catch (err) {
+      let message = '프로필 사진 변경에 실패했습니다.';
+
+      if (isAxiosError(err)) {
+        const rawData: unknown = err.response?.data;
+        const apiMessage =
+          rawData !== null &&
+          typeof rawData === 'object' &&
+          'message' in rawData
+            ? (rawData as { message?: unknown }).message
+            : undefined;
+
+        if (typeof apiMessage === 'string') {
+          message = apiMessage;
+        } else if (Array.isArray(apiMessage) && typeof apiMessage[0] === 'string') {
+          message = apiMessage[0];
+        }
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+
+      Alert.alert('오류', message);
+    } finally {
+      setIsProfileImageUploading(false);
+    }
+  }, [isProfileImageUploading, setUser, user]);
+
+  const handleProfileEditPress = useCallback(() => {
+    Alert.alert('프로필 편집', '변경할 항목을 선택하세요.', [
+      {
+        text: '프로필 사진 변경',
+        onPress: () => {
+          void handleProfileImageEdit();
+        },
+      },
+      {
+        text: '닉네임 변경',
+        onPress: handleNicknameModalOpen,
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
+  }, [handleNicknameModalOpen, handleProfileImageEdit]);
+
   const handleNicknameModalClose = useCallback(() => {
     setNicknameModalVisible(false);
   }, []);
@@ -471,10 +606,20 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
         {/* 1. 프로필 섹션 */}
         <View style={styles.profileSection}>
           {/* 아바타 */}
-          <View style={styles.avatarWrapper}>
-            {user?.profileImageUrl ? (
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            onPress={() => {
+              void handleProfileImageEdit();
+            }}
+            activeOpacity={0.8}
+            disabled={isProfileImageUploading}
+            accessibilityRole="button"
+            accessibilityLabel="프로필 사진 변경"
+            accessibilityState={{ disabled: isProfileImageUploading }}
+          >
+            {profileImageUri ? (
               <Image
-                source={{ uri: user.profileImageUrl }}
+                source={{ uri: profileImageUri }}
                 style={styles.avatarImage}
                 accessibilityRole="image"
                 accessibilityLabel={`${displayNickname} 프로필 사진`}
@@ -487,16 +632,22 @@ const MyPageScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.avatarVerifiedBadge}>
               <CheckIcon size={10} color={colors.white} />
             </View>
-          </View>
+            {isProfileImageUploading && (
+              <View style={styles.avatarLoadingOverlay}>
+                <ActivityIndicator size="small" color={colors.white} />
+              </View>
+            )}
+          </TouchableOpacity>
 
           {/* 이름 + 편집 */}
           <View style={styles.nicknameRow}>
             <Text style={styles.nickname}>{displayNickname}</Text>
             <TouchableOpacity
-              onPress={handleNicknameModalOpen}
+              onPress={handleProfileEditPress}
               activeOpacity={0.7}
+              disabled={isProfileImageUploading}
               accessibilityRole="button"
-              accessibilityLabel="닉네임 변경"
+              accessibilityLabel="프로필 편집"
             >
               <Text style={styles.nicknameEditBtnText}>편집</Text>
             </TouchableOpacity>
@@ -773,6 +924,13 @@ const styles = StyleSheet.create({
   avatarWrapper: {
     position: 'relative',
     marginBottom: spacing.md,
+  },
+  avatarLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: spacing.radiusFull,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatar: {
     width: spacing.avatarSize,

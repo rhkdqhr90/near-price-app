@@ -2,6 +2,7 @@ import { apiClient } from './client';
 import type {
   PublicUserResponse,
   UserResponse,
+  UpdateUserDto,
   UpdateNicknameDto,
   UpdateNotificationSettingsDto,
   CheckNicknameResponseDto,
@@ -40,6 +41,11 @@ export const userApi = {
 
   getUser: async (userId: string) => {
     const response = await apiClient.get<PublicUserResponse>(`/user/${userId}`);
+    return response.data;
+  },
+
+  updateUser: async (userId: string, dto: UpdateUserDto) => {
+    const response = await apiClient.patch<UserResponse>(`/user/${userId}`, dto);
     return response.data;
   },
 

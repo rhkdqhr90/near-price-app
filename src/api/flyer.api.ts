@@ -27,4 +27,7 @@ export const flyerApi = {
 
   deleteMyFlyer: (flyerId: string) =>
     apiClient.delete<void>(`/flyer/my/${flyerId}`),
+
+  trackProductView: (flyerId: string, productId: string) =>
+    apiClient.post<void>(`/flyer/${flyerId}/product/${productId}/view`),
 };

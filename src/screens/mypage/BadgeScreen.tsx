@@ -5,6 +5,9 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Image,
+  type ImageSourcePropType,
+  type ViewStyle,
 } from 'react-native';
 import LoadingView from '../../components/common/LoadingView';
 import ErrorView from '../../components/common/ErrorView';
@@ -31,6 +34,47 @@ interface BadgeGridItem {
   current?: number;
   threshold?: number;
 }
+
+type LevelBadgeKey = 'l1' | 'l2' | 'l3' | 'l4';
+
+interface LevelBadgeItem {
+  key: LevelBadgeKey;
+  level: 'L1' | 'L2' | 'L3' | 'L4';
+  name: string;
+  minTrustScore: number;
+  icon: ImageSourcePropType;
+}
+
+const LEVEL_BADGES: LevelBadgeItem[] = [
+  {
+    key: 'l1',
+    level: 'L1',
+    name: '시작',
+    minTrustScore: 0,
+    icon: require('../../../assets/level-badges/l1-default.png'),
+  },
+  {
+    key: 'l2',
+    level: 'L2',
+    name: '동네꾼',
+    minTrustScore: 70,
+    icon: require('../../../assets/level-badges/l2-happy.png'),
+  },
+  {
+    key: 'l3',
+    level: 'L3',
+    name: '가격지기',
+    minTrustScore: 85,
+    icon: require('../../../assets/level-badges/l3-wink.png'),
+  },
+  {
+    key: 'l4',
+    level: 'L4',
+    name: '알뜰왕',
+    minTrustScore: 95,
+    icon: require('../../../assets/level-badges/l4-sparkle.png'),
+  },
+];
 
 const BADGE_DESCRIPTIONS: Record<string, string> = {
   'first_registration': '첫 가격 등록',
@@ -154,6 +198,20 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
     verifications: trustScoreData?.totalVerifications ?? 0,
     trustScore: trustScoreData?.trustScore ?? user?.trustScore ?? 0,
   }), [trustScoreData, user?.trustScore]);
+
+  const currentLevelKey = React.useMemo<LevelBadgeKey>(() => {
+    if (stats.trustScore >= 95) {
+      return 'l4';
+    }
+    if (stats.trustScore >= 85) {
+      return 'l3';
+    }
+    if (stats.trustScore >= 70) {
+      return 'l2';
+    }
+    return 'l1';
+  }, [stats.trustScore]);
+
   const earnedCount = badgesData?.earned.length ?? 0;
   const totalCount = (badgesData?.earned.length ?? 0) + (badgesData?.progress.length ?? 0);
 
@@ -211,6 +269,38 @@ const BadgeScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats.trustScore}</Text>
             <Text style={styles.statLabel}>신뢰도</Text>
+          </View>
+        </View>
+
+        {/* 레벨 캐릭터 섹션 */}
+        <View style={styles.levelSection}>
+          <Text style={styles.levelSectionTitle}>LEVEL BADGES</Text>
+          <View style={styles.levelCard}>
+            {LEVEL_BADGES.map((level) => (
+              <View key={level.key} style={styles.levelItem}>
+                <View
+                  style={[
+                    styles.levelRing,
+                    LEVEL_RING_STYLE[level.key],
+                    currentLevelKey === level.key && styles.levelRingActive,
+                  ]}
+                >
+                  <Image source={level.icon} style={styles.levelCharacter} />
+                  <View style={styles.levelChip}>
+                    <Text style={styles.levelChipText}>{level.level}</Text>
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.levelName,
+                    currentLevelKey === level.key && styles.levelNameActive,
+                  ]}
+                >
+                  {level.name}
+                </Text>
+                <Text style={styles.levelScoreHint}>{level.minTrustScore}+ 점</Text>
+              </View>
+            ))}
           </View>
         </View>
 
@@ -301,6 +391,92 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.gray600,
     textAlign: 'center',
+  },
+
+  // 레벨 캐릭터
+  levelSection: {
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  levelSectionTitle: {
+    ...typography.body,
+    color: colors.primaryDark,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
+  },
+  levelCard: {
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusXl,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  levelItem: {
+    width: '24%',
+    alignItems: 'center',
+  },
+  levelRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  levelRingActive: {
+    transform: [{ scale: 1.05 }],
+  },
+  levelRingL1: {
+    backgroundColor: colors.gray200,
+    borderColor: colors.gray700,
+  },
+  levelRingL2: {
+    backgroundColor: colors.primary,
+    borderColor: colors.gray700,
+  },
+  levelRingL3: {
+    backgroundColor: colors.accent,
+    borderColor: colors.gray700,
+  },
+  levelRingL4: {
+    backgroundColor: colors.flyerBadgeYellow,
+    borderColor: colors.gray700,
+  },
+  levelCharacter: {
+    width: 44,
+    height: 44,
+  },
+  levelChip: {
+    position: 'absolute',
+    right: -6,
+    bottom: -4,
+    backgroundColor: colors.gray700,
+    borderRadius: spacing.radiusLg,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  levelChipText: {
+    ...typography.captionBold,
+    color: colors.white,
+  },
+  levelName: {
+    ...typography.body,
+    color: colors.gray700,
+    fontWeight: '700',
+    marginTop: spacing.sm,
+  },
+  levelNameActive: {
+    color: colors.black,
+  },
+  levelScoreHint: {
+    ...typography.caption,
+    color: colors.gray600,
+    marginTop: 2,
   },
 
   // 뱃지 보유 현황
@@ -426,5 +602,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+const LEVEL_RING_STYLE: Record<LevelBadgeKey, ViewStyle> = {
+  l1: styles.levelRingL1,
+  l2: styles.levelRingL2,
+  l3: styles.levelRingL3,
+  l4: styles.levelRingL4,
+};
 
 export default BadgeScreen;

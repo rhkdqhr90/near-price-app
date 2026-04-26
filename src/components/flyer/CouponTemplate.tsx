@@ -92,6 +92,7 @@ const CouponRow: React.FC<CouponRowProps> = ({ product, pct, onPress }) => {
             source={{ uri: product.imageUrl }}
             style={styles.stubImage}
             resizeMode="cover"
+            onError={handleImageError}
           />
         ) : (
           <Text style={styles.stubEmoji}>{product.emoji}</Text>

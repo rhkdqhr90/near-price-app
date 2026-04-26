@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { FlyerScreenProps } from '../../navigation/types';
+import type { FlyerScreenProps, MainTabParamList } from '../../navigation/types';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useFlyerDetail } from '../../hooks/queries/useFlyers';
 import SkeletonCard from '../../components/common/SkeletonCard';
 import ErrorView from '../../components/common/ErrorView';
@@ -21,19 +22,35 @@ import ChevronLeftIcon from '../../components/icons/ChevronLeftIcon';
 import ShareIcon from '../../components/icons/ShareIcon';
 import { naverLocalApi } from '../../api/naver-local.api';
 import { openMapApp } from '../../utils/openMapApp';
-import ClassicTemplate from '../../components/flyer/ClassicTemplate';
-import RetroTemplate from '../../components/flyer/RetroTemplate';
-import NewsTemplate from '../../components/flyer/NewsTemplate';
-import CouponTemplate from '../../components/flyer/CouponTemplate';
-import ProductDetailModal from '../../components/flyer/ProductDetailModal';
-import type { FlyerProductItem } from '../../types/api.types';
+import ColorFlyerTemplate from '../../components/flyer/ColorFlyerTemplate';
+import NewsFlyerTemplate from '../../components/flyer/NewsFlyerTemplate';
+import RisoFlyerTemplate from '../../components/flyer/RisoFlyerTemplate';
+import PosterFlyerTemplate from '../../components/flyer/PosterFlyerTemplate';
+import type { FlyerProductItem, FlyerTemplateType } from '../../types/api.types';
+import { flyerApi } from '../../api/flyer.api';
 
 type Props = FlyerScreenProps<'FlyerDetail'>;
+
+const PAGE_SIZE = 8;
+
+type FlyerStyle = 'color' | 'news' | 'riso' | 'poster';
+
+const toFlyerStyle = (templateType: FlyerTemplateType | null | undefined): FlyerStyle => {
+  if (templateType === 'news') return 'news';
+  if (templateType === 'retro') return 'riso';
+  if (templateType === 'coupon') return 'poster';
+  return 'color';
+};
 
 const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { flyerId } = route.params;
   const { data: flyer, isLoading, isError, refetch } = useFlyerDetail(flyerId);
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [flyerId]);
 
   const handleShare = useCallback(async () => {
     if (!flyer) { return; }
@@ -72,27 +89,51 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   }, [flyer]);
 
-  const handleCommunityShare = useCallback(async () => {
-    if (!flyer) { return; }
-    try {
-      await Share.share({ message: `${flyer.storeName} 정보를 이웃과 공유했습니다.` });
-    } catch {
-      // ignore
-    }
-  }, [flyer]);
-
-  const [selectedProduct, setSelectedProduct] = useState<FlyerProductItem | null>(null);
   const handleProductPress = useCallback((product: FlyerProductItem) => {
-    setSelectedProduct(product);
-  }, []);
-  const handleModalClose = useCallback(() => {
-    setSelectedProduct(null);
-  }, []);
+    flyerApi.trackProductView(flyerId, product.id).catch(() => {});
+
+    if (flyer?.storeId) {
+      const parentNavigation = navigation.getParent<BottomTabNavigationProp<MainTabParamList>>();
+      if (!parentNavigation) {
+        Alert.alert('오류', '화면 이동에 실패했습니다. 앱을 다시 실행해 주세요.');
+        return;
+      }
+
+      parentNavigation.navigate('HomeStack', {
+        screen: 'StoreDetail',
+        params: { storeId: flyer.storeId },
+      });
+      return;
+    }
+
+    if (flyer?.storeAddress) {
+      void handleDirection();
+      return;
+    }
+
+    Alert.alert('안내', '매장 정보를 찾지 못해 상세 페이지로 이동할 수 없습니다.');
+  }, [flyer?.storeAddress, flyer?.storeId, flyerId, handleDirection, navigation]);
 
   const scrollContentStyle = useMemo(
     () => ({ paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xxl }),
     [insets.bottom],
   );
+
+  const allProducts = useMemo(
+    () => flyer?.products ?? [],
+    [flyer?.products],
+  );
+  const pageCount = useMemo(
+    () => Math.max(1, Math.ceil(allProducts.length / PAGE_SIZE)),
+    [allProducts.length],
+  );
+
+  useEffect(() => {
+    if (pageIndex <= pageCount - 1) {
+      return;
+    }
+    setPageIndex(Math.max(0, pageCount - 1));
+  }, [pageCount, pageIndex]);
 
   if (isLoading) {
     return <SkeletonCard variant="price" />;
@@ -102,7 +143,13 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     return <ErrorView message="전단지를 불러오지 못했습니다." onRetry={refetch} />;
   }
 
-  const templateType = flyer.templateType ?? 'classic';
+  const start = pageIndex * PAGE_SIZE;
+  const pagedFlyer = {
+    ...flyer,
+    products: allProducts.slice(start, start + PAGE_SIZE),
+  };
+
+  const renderStyle = toFlyerStyle(pagedFlyer.templateType);
 
   return (
     <View style={styles.screen}>
@@ -132,41 +179,67 @@ const FlyerDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         contentContainerStyle={scrollContentStyle}
         showsVerticalScrollIndicator={false}
       >
-        {templateType === 'retro' && (
-          <RetroTemplate
-            flyer={flyer}
-            onDirection={handleDirection}
-            onCommunityShare={handleCommunityShare}
+        {renderStyle === 'color' && (
+          <ColorFlyerTemplate
+            flyer={pagedFlyer}
             onProductPress={handleProductPress}
           />
         )}
-        {templateType === 'news' && (
-          <NewsTemplate
-            flyer={flyer}
-            onDirection={handleDirection}
-            onCommunityShare={handleCommunityShare}
+        {renderStyle === 'news' && (
+          <NewsFlyerTemplate
+            flyer={pagedFlyer}
             onProductPress={handleProductPress}
           />
         )}
-        {templateType === 'coupon' && (
-          <CouponTemplate
-            flyer={flyer}
-            onDirection={handleDirection}
-            onCommunityShare={handleCommunityShare}
+        {renderStyle === 'riso' && (
+          <RisoFlyerTemplate
+            flyer={pagedFlyer}
             onProductPress={handleProductPress}
           />
         )}
-        {templateType === 'classic' && (
-          <ClassicTemplate
-            flyer={flyer}
-            onDirection={handleDirection}
-            onCommunityShare={handleCommunityShare}
+        {renderStyle === 'poster' && (
+          <PosterFlyerTemplate
+            flyer={pagedFlyer}
             onProductPress={handleProductPress}
           />
+        )}
+
+        {pageCount > 1 && (
+          <View style={styles.pageControlsWrap}>
+            <TouchableOpacity
+              style={[styles.pageButton, pageIndex === 0 && styles.pageButtonDisabled]}
+              onPress={() => setPageIndex((prev) => Math.max(0, prev - 1))}
+              disabled={pageIndex === 0}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="전단지 이전 페이지"
+            >
+              <Text style={[styles.pageButtonText, pageIndex === 0 && styles.pageButtonTextDisabled]}>이전</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.pageIndicator}>{pageIndex + 1} / {pageCount}</Text>
+
+            <TouchableOpacity
+              style={[styles.pageButton, pageIndex >= pageCount - 1 && styles.pageButtonDisabled]}
+              onPress={() => setPageIndex((prev) => Math.min(pageCount - 1, prev + 1))}
+              disabled={pageIndex >= pageCount - 1}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="전단지 다음 페이지"
+            >
+              <Text
+                style={[
+                  styles.pageButtonText,
+                  pageIndex >= pageCount - 1 && styles.pageButtonTextDisabled,
+                ]}
+              >
+                다음
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
 
-      <ProductDetailModal product={selectedProduct} onClose={handleModalClose} />
     </View>
   );
 };
@@ -199,6 +272,42 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  pageControlsWrap: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  pageButton: {
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    backgroundColor: colors.white,
+    borderRadius: spacing.radiusSm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  pageButtonDisabled: {
+    backgroundColor: colors.gray100,
+    borderColor: colors.gray200,
+  },
+  pageButtonText: {
+    fontSize: 12,
+    color: colors.gray700,
+    fontWeight: '700' as const,
+  },
+  pageButtonTextDisabled: {
+    color: colors.gray400,
+  },
+  pageIndicator: {
+    minWidth: 64,
+    textAlign: 'center',
+    fontSize: 12,
+    color: colors.gray700,
+    fontWeight: '800' as const,
   },
 });
 

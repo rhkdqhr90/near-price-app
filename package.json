@@ -5,8 +5,12 @@
   "scripts": {
     "android": "ENVFILE=.env.local react-native run-android --mode localDebug",
     "android:local": "ENVFILE=.env.local react-native run-android --mode localDebug",
+    "android:local:debug:build": "cd android && ENVFILE=.env.local ./gradlew assembleLocalDebug",
+    "android:local:debug:install": "adb install -r android/app/build/outputs/apk/local/debug/app-local-debug.apk && npm run adb:reverse",
+    "android:local:debug:rebuild": "npm run android:local:debug:build && npm run android:local:debug:install",
     "android:local:release": "cd android && ENVFILE=.env.local ./gradlew assembleLocalRelease",
     "android:prod:release": "cd android && ENVFILE=.env.production ./gradlew bundleProdRelease",
+    "adb:reverse": "adb reverse tcp:3000 tcp:3000 && adb reverse tcp:8081 tcp:8081 && adb reverse --list",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",

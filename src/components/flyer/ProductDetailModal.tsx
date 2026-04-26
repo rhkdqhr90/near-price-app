@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -17,6 +17,7 @@ import { formatPrice } from '../../utils/format';
 interface Props {
   product: FlyerProductItem | null;
   onClose: () => void;
+  onRegisterPrice?: () => void;
 }
 
 type BadgeType = 'red' | 'yellow' | 'blue';
@@ -32,13 +33,17 @@ const BADGE_TEXT: Record<BadgeType, string> = {
   blue: colors.white,
 };
 
-const ProductDetailModal: React.FC<Props> = ({ product, onClose }) => {
+const ProductDetailModal: React.FC<Props> = ({ product, onClose, onRegisterPrice }) => {
   const insets = useSafeAreaInsets();
   const [imageError, setImageError] = useState(false);
 
   const handleImageError = useCallback(() => setImageError(true), []);
 
   // product가 바뀌면 imageError 초기화
+  useEffect(() => {
+    setImageError(false);
+  }, [product?.id]);
+
   const imageUri = product?.imageUrl ?? null;
   const badges = product?.badges ?? [];
 
@@ -46,6 +51,11 @@ const ProductDetailModal: React.FC<Props> = ({ product, onClose }) => {
     product?.originalPrice && product.originalPrice > 0
       ? Math.round((1 - product.salePrice / product.originalPrice) * 100)
       : null;
+
+  const handleRegisterPrice = useCallback(() => {
+    onClose();
+    onRegisterPrice?.();
+  }, [onClose, onRegisterPrice]);
 
   return (
     <Modal
@@ -122,16 +132,29 @@ const ProductDetailModal: React.FC<Props> = ({ product, onClose }) => {
             </View>
           </View>
 
-          {/* 닫기 버튼 */}
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="닫기"
-          >
-            <Text style={styles.closeBtnText}>닫기</Text>
-          </TouchableOpacity>
+          {/* 버튼 영역 */}
+          <View style={styles.btnRow}>
+            {onRegisterPrice && (
+              <TouchableOpacity
+                style={styles.registerBtn}
+                onPress={handleRegisterPrice}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="이 상품 가격 등록하기"
+              >
+                <Text style={styles.registerBtnText}>📝 가격 등록하기</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.closeBtn, onRegisterPrice ? styles.closeBtnNarrow : null]}
+              onPress={onClose}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="닫기"
+            >
+              <Text style={styles.closeBtnText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -249,12 +272,33 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
 
-  // 닫기 버튼
+  // 버튼 영역
+  btnRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  registerBtn: {
+    flex: 1,
+    borderRadius: spacing.radiusMd,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  registerBtnText: {
+    ...typography.body,
+    color: colors.white,
+    fontWeight: '700' as const,
+  },
   closeBtn: {
+    flex: 1,
     borderRadius: spacing.radiusMd,
     backgroundColor: colors.gray100,
     paddingVertical: spacing.lg,
     alignItems: 'center',
+  },
+  closeBtnNarrow: {
+    flex: 0,
+    paddingHorizontal: spacing.xl,
   },
   closeBtnText: {
     ...typography.body,
